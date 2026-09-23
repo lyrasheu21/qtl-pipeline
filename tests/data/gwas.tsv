@@ -1,0 +1,3 @@
+name	path	snp_col	bp_col	beta_col	se_col	p_col	n_col	n	type	s
+TOY_CC	tests/data/gwas_toy_cc.tsv.gz	SNP	BP	beta	se	p	N		cc	0.4
+TOY_QUANT	tests/data/gwas_toy_quant.tsv.gz	SNP	BP	beta	se	p		20000	quant	

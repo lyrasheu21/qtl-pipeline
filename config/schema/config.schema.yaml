@@ -1,0 +1,155 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+description: cciQTL pipeline configuration
+type: object
+
+definitions:
+  probability:
+    type: number
+    minimum: 0
+    maximum: 1
+
+properties:
+  results_dir: {type: string}
+
+  modules:
+    type: object
+    properties:
+      coloc: {type: boolean}
+      magma: {type: boolean}
+      pi1: {type: boolean}
+      mediation: {type: boolean}
+      expression_cor: {type: boolean}
+      sensitivity: {type: boolean}
+    required: [coloc, magma, pi1, mediation, expression_cor, sensitivity]
+
+  inputs:
+    type: object
+    properties:
+      genotype:
+        type: object
+        properties:
+          bfile: {type: string}
+          vcf: {type: string}
+          keep: {type: string}
+          update_ids: {type: string}
+      cci_matrix: {type: string, minLength: 1}
+      cci_id_column: {type: string, minLength: 1}
+      gene_annotation: {type: string, minLength: 1}
+      metadata: {type: string, minLength: 1}
+      metadata_id_column: {type: string, minLength: 1}
+      ancestry_pcs: {type: string}
+      ancestry_pcs_id_column: {type: string}
+      expression_pattern: {type: string}
+      cell_types: {type: string, minLength: 1}
+      gwas_table: {type: string}
+    required: [genotype, cci_matrix, cci_id_column, gene_annotation, metadata, cell_types]
+
+  chromosomes:
+    type: array
+    items: {type: [integer, string]}
+    minItems: 1
+
+  genotype_qc:
+    type: object
+    properties:
+      geno: {$ref: "#/definitions/probability"}
+      maf: {type: number, minimum: 0, maximum: 0.5}
+      hwe: {$ref: "#/definitions/probability"}
+      mishap_p: {$ref: "#/definitions/probability"}
+    required: [geno, maf, hwe, mishap_p]
+
+  phenotype:
+    type: object
+    properties:
+      min_completeness: {$ref: "#/definitions/probability"}
+      zero_as_missing: {type: boolean}
+      min_donors: {type: integer, minimum: 1}
+    required: [min_completeness, zero_as_missing, min_donors]
+
+  covariates:
+    type: object
+    properties:
+      definitions:
+        type: object
+        additionalProperties:
+          type: object
+          properties:
+            column: {type: string}
+            transform: {enum: [none, scale, log, factor]}
+          required: [column, transform]
+      use: {type: array, items: {type: string}}
+      ancestry_pc_prefix: {type: string}
+      n_ancestry_pcs: {type: integer, minimum: 0}
+    required: [definitions, use, n_ancestry_pcs]
+
+  qtl:
+    type: object
+    properties:
+      qtltools_binary: {type: string}
+      n_chunks: {type: integer, minimum: 1}
+      n_permutations: {type: integer, minimum: 1}
+      nominal_threshold: {type: number, exclusiveMinimum: 0, maximum: 1}
+      window: {type: integer, minimum: 1}
+      seed: {type: integer}
+    required: [n_chunks, n_permutations, nominal_threshold, window, seed]
+
+  qtl_qc:
+    type: object
+    properties:
+      fdr: {$ref: "#/definitions/probability"}
+      nominal_sample_fraction: {$ref: "#/definitions/probability"}
+      seed: {type: integer}
+    required: [fdr, nominal_sample_fraction]
+
+  coloc:
+    type: object
+    properties:
+      p1: {type: number}
+      p2: {type: number}
+      p12: {type: number}
+      min_snps: {type: integer, minimum: 1}
+      pp_h4: {$ref: "#/definitions/probability"}
+      snp_pp_h4: {$ref: "#/definitions/probability"}
+      max_locus_plots: {type: integer, minimum: 0}
+
+  magma:
+    type: object
+    properties:
+      binary: {type: string}
+      gene_id_column: {type: string}
+      levels:
+        type: array
+        items: {enum: [subclass, class, superclass]}
+      nominal_p: {$ref: "#/definitions/probability"}
+      gene_results:
+        type: object
+        additionalProperties: {type: string}
+
+  pi1:
+    type: object
+    properties:
+      eqtl_pattern: {type: string}
+      has_header: {type: boolean}
+      columns: {type: array, items: {type: string}}
+      snp_column: {type: string}
+      gene_column: {type: string}
+      beta_column: {type: string}
+      z_column: {type: string}
+      p_column: {type: string}
+
+  mediation:
+    type: object
+    properties:
+      snp_pp_h4: {$ref: "#/definitions/probability"}
+      pp_h4: {$ref: "#/definitions/probability"}
+      gwas_p: {$ref: "#/definitions/probability"}
+      qtl_p: {$ref: "#/definitions/probability"}
+      sims: {type: integer, minimum: 1}
+      seed: {type: integer}
+
+  figures:
+    type: object
+    properties:
+      chord_targets: {type: array, items: {type: string}}
+
+required: [modules, inputs, chromosomes, genotype_qc, phenotype, covariates, qtl, qtl_qc]

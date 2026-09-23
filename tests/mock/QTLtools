@@ -1,0 +1,122 @@
+#!/usr/bin/env Rscript
+# Minimal stand-in for `QTLtools cis`, for testing the pipeline on machines
+# where QTLtools is unavailable (it only ships Linux binaries). NOT for real
+# analyses. Selected with:  --configfile config/test.yaml tests/mock.yaml
+#
+# Supports the options the pipeline uses: --vcf --bed --cov --out --permute N
+# --nominal T --window --seed --normal --std-err --chunk k n --exclude-samples.
+# Association = linear regression of the (rank-normalised) phenotype on
+# genotype dosage after regressing out covariates. Permutation p-values use the
+# same beta approximation idea as QTLtools. Output columns match QTLtools v1.3
+# with --std-err.
+
+suppressPackageStartupMessages(library(data.table))
+
+args <- commandArgs(trailingOnly = TRUE)
+if (length(args) == 0 || args[1] != "cis") stop("mock QTLtools only implements 'cis'")
+args <- args[-1]
+opt <- list(window = 1e6, seed = 1, normal = FALSE, chunk = c(1, 1), exclude = NULL)
+i <- 1
+while (i <= length(args)) {
+  a <- args[i]
+  switch(a,
+    "--vcf" = { opt$vcf <- args[i + 1]; i <- i + 1 },
+    "--bed" = { opt$bed <- args[i + 1]; i <- i + 1 },
+    "--cov" = { opt$cov <- args[i + 1]; i <- i + 1 },
+    "--out" = { opt$out <- args[i + 1]; i <- i + 1 },
+    "--permute" = { opt$permute <- as.integer(args[i + 1]); i <- i + 1 },
+    "--nominal" = { opt$nominal <- as.numeric(args[i + 1]); i <- i + 1 },
+    "--window" = { opt$window <- as.numeric(args[i + 1]); i <- i + 1 },
+    "--seed" = { opt$seed <- as.integer(args[i + 1]); i <- i + 1 },
+    "--exclude-samples" = { opt$exclude <- readLines(args[i + 1]); i <- i + 1 },
+    "--chunk" = { opt$chunk <- as.integer(args[(i + 1):(i + 2)]); i <- i + 2 },
+    "--normal" = { opt$normal <- TRUE },
+    "--std-err" = {},
+    stop("mock QTLtools: unsupported option ", a)
+  )
+  i <- i + 1
+}
+set.seed(opt$seed)
+
+bed <- fread(cmd = paste("gzip -dc", shQuote(opt$bed)))
+setnames(bed, 1:6, c("chr", "start", "end", "pid", "gid", "strand"))
+vcf <- fread(cmd = paste("gzip -dc", shQuote(opt$vcf), "| grep -v '^##'"))
+setnames(vcf, 1:3, c("CHROM", "POS", "ID"))
+cov <- fread(opt$cov)
+
+samples <- Reduce(intersect, list(names(bed)[-(1:6)], names(vcf)[-(1:9)], names(cov)[-1]))
+samples <- setdiff(samples, opt$exclude)
+
+# chunk k of n (by phenotype order)
+chunk_of <- if (nrow(bed)) ceiling(seq_len(nrow(bed)) * opt$chunk[2] / nrow(bed)) else integer(0)
+bed <- bed[chunk_of == opt$chunk[1]]
+cat(sprintf("mock QTLtools: %d phenotypes in chunk %d/%d, %d samples\n", nrow(bed), opt$chunk[1], opt$chunk[2], length(samples)))
+if (nrow(bed) == 0) { file.create(opt$out); quit(save = "no") }
+
+dosage <- function(gt) {
+  gt <- sub(":.*$", "", gsub("|", "/", gt, fixed = TRUE))
+  out <- rep(NA_real_, length(gt))
+  out[gt == "0/0"] <- 0; out[gt %in% c("0/1", "1/0")] <- 1; out[gt == "1/1"] <- 2
+  out
+}
+G <- t(apply(as.matrix(vcf[, ..samples]), 1, dosage))
+dimnames(G) <- list(vcf$ID, samples)
+G[is.na(G)] <- rowMeans(G, na.rm = TRUE)[row(G)][is.na(G)]
+
+cv <- as.data.frame(t(as.matrix(cov[, ..samples])), stringsAsFactors = FALSE)
+names(cv) <- make.names(cov[[1]])
+for (n in names(cv)) {
+  num <- suppressWarnings(as.numeric(cv[[n]]))
+  cv[[n]] <- if (all(!is.na(num))) num else factor(cv[[n]])
+}
+
+lines <- character()
+for (k in seq_len(nrow(bed))) {
+  ph <- bed[k]
+  y <- as.numeric(unlist(ph[, ..samples]))
+  keep <- !is.na(y)
+  if (opt$normal) y[keep] <- qnorm((rank(y[keep]) - 0.5) / sum(keep))
+  X <- model.matrix(~ ., data = cv[keep, , drop = FALSE])
+  resid <- function(v) as.numeric(v - X %*% qr.solve(X, v))
+  ry <- resid(y[keep])
+  cis <- which(as.character(vcf$CHROM) == sub("^chr", "", ph$chr) &
+               vcf$POS >= ph$start - opt$window & vcf$POS <= ph$end + opt$window)
+  rg <- if (length(cis)) t(apply(G[cis, keep, drop = FALSE], 1, resid)) else matrix(nrow = 0, ncol = sum(keep))
+  if (length(cis) == 1) rg <- matrix(rg, nrow = 1)
+  ok <- apply(rg, 1, function(v) sd(v) > 1e-8)
+  cis <- cis[ok]; rg <- rg[ok, , drop = FALSE]
+  dof <- sum(keep) - ncol(X) - 1
+
+  assoc <- function(yv) {
+    r <- as.numeric(cor(t(rg), yv))
+    t_stat <- r * sqrt(dof / pmax(1 - r^2, 1e-12))
+    list(r = r, t = t_stat, p = 2 * pt(-abs(t_stat), dof))
+  }
+  base <- sprintf("%s %s %d %d %s %d", ph$pid, sub("^chr", "", ph$chr), ph$start, ph$end, ph$strand, length(cis))
+  if (!length(cis)) {
+    if (!is.null(opt$permute)) lines <- c(lines, paste(base, paste(rep("NA", 15), collapse = " ")))
+    next
+  }
+  a <- assoc(ry)
+  slope <- as.numeric(rg %*% ry) / rowSums(rg^2)
+  se <- abs(slope / a$t)
+  snp_cols <- sprintf("%d %s %s %d %d", vcf$POS[cis] - ph$start, vcf$ID[cis], vcf$CHROM[cis], vcf$POS[cis], vcf$POS[cis])
+
+  if (!is.null(opt$nominal)) {
+    best <- which.min(a$p)
+    sel <- which(a$p <= opt$nominal)
+    lines <- c(lines, sprintf("%s %s %g %g %g %g %d", base, snp_cols[sel], a$p[sel], a$r[sel]^2,
+                              slope[sel], se[sel], as.integer(sel == best)))
+  } else {
+    best <- which.min(a$p)
+    perm_min <- replicate(opt$permute, min(assoc(sample(ry))$p))
+    m <- mean(perm_min); v <- var(perm_min)
+    common <- m * (1 - m) / v - 1
+    shape1 <- m * common; shape2 <- (1 - m) * common
+    adj_emp <- (sum(perm_min <= a$p[best]) + 1) / (opt$permute + 1)
+    adj_beta <- pbeta(a$p[best], shape1, shape2)
+    lines <- c(lines, sprintf("%s %s %d %g %g %g %g %g %g %g %g %g", base, snp_cols[best], dof, dof,
+                              shape1, shape2, a$p[best], a$r[best]^2, slope[best], se[best], adj_emp, adj_beta))
+  }
+}
+writeLines(lines, opt$out)

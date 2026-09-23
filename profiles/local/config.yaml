@@ -1,0 +1,7 @@
+# Run on the current machine.
+#   snakemake --profile profiles/local
+cores: 4
+software-deployment-method: conda
+printshellcmds: true
+rerun-incomplete: true
+keep-going: false

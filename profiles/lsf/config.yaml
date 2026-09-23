@@ -1,0 +1,15 @@
+# Submit every rule as an LSF job.
+# Requires: pip install snakemake-executor-plugin-lsf
+#   snakemake --profile profiles/lsf
+# Set lsf_project / lsf_queue to your allocation before running.
+executor: lsf
+jobs: 200
+latency-wait: 60
+software-deployment-method: conda
+printshellcmds: true
+rerun-incomplete: true
+default-resources:
+  lsf_project: "your_project"
+  lsf_queue: "premium"
+  mem_mb: 8000
+  runtime: 720

@@ -1,0 +1,14 @@
+# One row per GWAS used for colocalisation. Lines starting with # are ignored.
+# Columns:
+#   name      short label used in output file names (letters, digits, _ only)
+#   path      summary statistics file (TSV, may be gzipped)
+#   snp_col, bp_col, beta_col, se_col, p_col   column names in that file
+#   n_col     column holding per-SNP sample size (leave empty to use n)
+#   n         total sample size when there is no n_col
+#   type      cc (case-control) or quant
+#   s         proportion of cases, required when type is cc
+# SNP IDs must use the same naming (e.g. rsIDs) as the genotype VCF.
+#
+# Example:
+# SCZ	/data/gwas/SCZ_2022_Trubetskoy.tsv	SNP	BP	beta	se	p	N		cc	0.42
+name	path	snp_col	bp_col	beta_col	se_col	p_col	n_col	n	type	s

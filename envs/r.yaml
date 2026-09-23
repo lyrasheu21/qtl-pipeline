@@ -1,0 +1,16 @@
+# R environment for every analysis and figure script
+channels: [conda-forge, bioconda, nodefaults]
+dependencies:
+  - r-base>=4.4.3
+  - r-data.table
+  - r-r.utils
+  - r-arrow
+  - r-ggplot2
+  - r-patchwork
+  - r-upsetr
+  - r-circlize
+  - r-coloc
+  - r-mediation
+  - r-testthat
+  - bioconductor-qvalue
+  - bioconductor-limma

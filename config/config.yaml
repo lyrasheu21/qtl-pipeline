@@ -1,0 +1,196 @@
+# cciQTL pipeline configuration
+#
+# Every input path and analysis parameter lives in this file. Relative paths
+# are resolved from the directory you run `snakemake` in (the repository root).
+# To run on a different dataset, copy this file and pass it with
+#   snakemake --configfile my_config.yaml ...
+
+results_dir: "results"
+
+# ---------------------------------------------------------------------------
+# Modules. Genotype QC, phenotype BEDs, covariates, QTL mapping and QTL QC
+# always run. Switch a downstream module off if you don't have its inputs.
+# ---------------------------------------------------------------------------
+modules:
+  coloc: true            # needs gwas_table
+  magma: true            # needs magma.gene_results
+  pi1: true              # needs pi1.eqtl_pattern
+  mediation: true        # needs coloc + inputs.expression_pattern
+  expression_cor: true   # needs inputs.expression_pattern
+  sensitivity: false     # extra permutation runs, see `sensitivity:` below
+
+# ---------------------------------------------------------------------------
+# Inputs
+# ---------------------------------------------------------------------------
+inputs:
+  genotype:
+    # Give exactly one of `bfile` (plink prefix, without .bed/.bim/.fam) or `vcf`.
+    bfile: ""
+    vcf: ""
+    keep: ""             # optional: plink --keep file (FID IID), e.g. EUR donors
+    update_ids: ""       # optional: plink --update-ids file (old FID, old IID, new FID, new IID)
+
+  # Donor x CCI score matrix: one row per CCI, one column per donor, plus an ID
+  # column. Accepts .parquet, .tsv(.gz) or .csv(.gz).
+  # CCI IDs look like "Astro:APOE->Micro:TREM2" (legacy "Astro:APOE^Micro:TREM2" also works).
+  cci_matrix: ""
+  cci_id_column: "cci"
+
+  # Gene coordinates used to place each CCI at its ligand (sending) or
+  # receptor (receiving) gene. TSV with columns:
+  #   gene_name  gene_id  chrom  start  end  strand
+  gene_annotation: ""
+
+  # Donor metadata (covariates, including any global PCs). TSV or CSV.
+  metadata: ""
+  metadata_id_column: "SubID"
+
+  # Genetic ancestry PCs, one row per donor. TSV or CSV.
+  ancestry_pcs: ""
+  ancestry_pcs_id_column: "SubID"
+
+  # Residualised gene expression, one file per subclass. `{subclass}` is
+  # replaced by each subclass name. First column = gene symbol, other columns = donors.
+  # Used by the mediation and expression_cor modules.
+  expression_pattern: ""
+
+  cell_types: "config/cell_types.tsv"
+  gwas_table: "config/gwas.tsv"
+
+genome_build: "GRCh38"   # label only; genotypes, GWAS, eQTL and annotation must share one build
+
+chromosomes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+
+# ---------------------------------------------------------------------------
+# 01 Genotype QC (plink 1.9)
+# ---------------------------------------------------------------------------
+genotype_qc:
+  geno: 0.05             # max per-variant missingness
+  maf: 0.01              # min minor allele frequency
+  hwe: 1.0e-6            # Hardy-Weinberg equilibrium p-value threshold
+  mishap_p: 1.0e-10      # drop variants with --test-mishap p below this
+
+# ---------------------------------------------------------------------------
+# 02 Phenotype BEDs
+# ---------------------------------------------------------------------------
+phenotype:
+  # Keep CCIs with a non-zero, non-missing score in at least this fraction of donors.
+  min_completeness: 0.0
+  # Treat zero scores as missing (NA) in the BED instead of as values.
+  zero_as_missing: false
+  min_donors: 30         # stop if fewer donors overlap genotype, CCI matrix and metadata
+
+# ---------------------------------------------------------------------------
+# 03 Covariates
+# ---------------------------------------------------------------------------
+covariates:
+  # Every covariate the pipeline knows about: output name -> metadata column + transform.
+  # transform: none | scale | log | factor
+  definitions:
+    scaled_PMI:       {column: PMI, transform: scale}
+    scaled_Age:       {column: Age, transform: scale}
+    Sex:              {column: Sex, transform: factor}
+    prep:             {column: prep, transform: factor}
+    Brain_bank:       {column: Brain_bank, transform: factor}
+    log_avg_n_counts: {column: avg_n_counts, transform: log}
+    global_PC1:       {column: PC1, transform: none}
+    global_PC2:       {column: PC2, transform: none}
+    global_PC3:       {column: PC3, transform: none}
+  # Covariates used in the main analysis (ancestry PCs are added automatically).
+  use: [scaled_PMI, scaled_Age, Sex, prep, Brain_bank, log_avg_n_counts]
+  ancestry_pc_prefix: "PC"
+  n_ancestry_pcs: 10
+
+# ---------------------------------------------------------------------------
+# 04 cis-QTL mapping (QTLtools cis)
+# ---------------------------------------------------------------------------
+qtl:
+  qtltools_binary: "QTLtools"   # path to QTLtools v1.3 (not available from conda)
+  n_chunks: 22
+  n_permutations: 1000
+  nominal_threshold: 1
+  window: 1000000
+  seed: 42
+
+# ---------------------------------------------------------------------------
+# 05 QTL QC
+# ---------------------------------------------------------------------------
+qtl_qc:
+  fdr: 0.05                     # q-value threshold, computed per anchor subclass
+  nominal_sample_fraction: 0.001  # fraction of nominal p-values sampled for lambda / QQ
+  seed: 42
+
+# ---------------------------------------------------------------------------
+# Sensitivity analyses (modules.sensitivity: true). Each entry adds one extra
+# permutation run; results are summarised side by side with the main run.
+# ---------------------------------------------------------------------------
+sensitivity:
+  n_permutations: 200
+  completeness: [0.15, 0.2, 0.25, 0.3, 0.35]
+  donor_fraction: [0.98, 0.95, 0.9, 0.85, 0.8]   # keep this fraction of donors (random, seeded)
+  covariate_sets:
+    with_global_PC1: [scaled_PMI, scaled_Age, Sex, prep, Brain_bank, log_avg_n_counts, global_PC1]
+    with_global_PC2: [scaled_PMI, scaled_Age, Sex, prep, Brain_bank, log_avg_n_counts, global_PC2]
+  seed: 42
+
+# ---------------------------------------------------------------------------
+# 06 Colocalisation (coloc.abf); GWAS list in config/gwas.tsv
+# ---------------------------------------------------------------------------
+coloc:
+  p1: 1.0e-4
+  p2: 1.0e-4
+  p12: 1.0e-5
+  min_snps: 1             # skip CCIs with fewer SNPs shared between QTL and GWAS
+  pp_h4: 0.5              # locus-level PP.H4 needed to call a colocalisation
+  snp_pp_h4: 0.1          # SNPs above this SNP.PP.H4 are kept for each hit
+  max_locus_plots: 50     # per GWAS x direction, Gold_Unique hits only
+
+# ---------------------------------------------------------------------------
+# 07 MAGMA gene-set enrichment
+# ---------------------------------------------------------------------------
+magma:
+  binary: "magma"         # path to the MAGMA executable (not available from conda)
+  gene_id_column: "gene_id"   # annotation column matching the gene IDs in genes.raw
+  levels: [subclass, class, superclass]
+  nominal_p: 0.05         # "nominal" gene set: adj_beta_pval <= this
+  gene_results: {}        # GWAS name -> path to MAGMA .genes.raw, e.g.
+  #   SCZ: /path/to/SCZ.genes.raw
+
+# ---------------------------------------------------------------------------
+# 08 pi1 replication in an eQTL resource
+# ---------------------------------------------------------------------------
+pi1:
+  # One file per subclass and chromosome; {subclass} and {chr} are filled in.
+  eqtl_pattern: ""
+  has_header: false
+  columns: [chr, start, end, snp, ref, alt, gene, beta, se, z]  # used when has_header is false
+  snp_column: snp
+  gene_column: gene
+  beta_column: beta
+  z_column: z             # set p_column instead if the resource has p-values
+  p_column: ""
+
+# ---------------------------------------------------------------------------
+# 09 Mediation: SNP -> anchor gene expression -> partner gene expression
+# ---------------------------------------------------------------------------
+mediation:
+  snp_pp_h4: 0.5
+  pp_h4: 0.8
+  gwas_p: 5.0e-8
+  qtl_p: 5.0e-8
+  sims: 1000
+  seed: 42
+
+# ---------------------------------------------------------------------------
+# 10 CCI score vs ligand / receptor expression correlation
+# ---------------------------------------------------------------------------
+expression_cor:
+  min_donors: 4
+
+# ---------------------------------------------------------------------------
+# 11 Figures
+# ---------------------------------------------------------------------------
+figures:
+  # Anchor genes ("Subclass:Gene") to draw a mediation chord diagram for,
+  # e.g. ["Micro:TREM2"]. Leave empty to skip.
+  chord_targets: []

@@ -1,0 +1,8 @@
+# plink 1.9 genotype QC, bcftools/htslib for VCF handling
+channels: [conda-forge, bioconda, nodefaults]
+dependencies:
+  - plink=1.90b7.7
+  - bcftools>=1.17
+  - htslib>=1.17
+  - gawk
+  - gzip

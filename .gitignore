@@ -1,0 +1,56 @@
+# ---- Pipeline outputs -------------------------------------------------------
+results/
+results_*/
+logs/
+.snakemake/
+
+# ---- Real data never goes in this repository --------------------------------
+/data/
+*.bam
+*.bai
+*.cram
+*.crai
+*.h5ad
+*.h5
+*.hdf5
+*.loom
+*.mtx
+*.rds
+*.RData
+*.rda
+*.parquet
+*.feather
+*.vcf
+*.vcf.gz
+*.bcf
+*.tbi
+*.csi
+*.bed
+*.bed.gz
+*.bim
+*.fam
+*.pgen
+*.pvar
+*.psam
+*.genes.raw
+*.gsa.out
+*.sets.out
+*.qtl.out
+
+# The small synthetic toy dataset used by the tests is allowed
+!tests/data/
+!tests/data/**
+
+# ---- Editors / OS / R --------------------------------------------------------
+.DS_Store
+.Rhistory
+.RData
+.Rproj.user/
+.vscode/
+.idea/
+
+# ---- Private working material (kept locally, never committed) ---------------
+# The original analysis notebooks and their inventory contain cluster paths,
+# collaborator names and unpublished results.
+original_scripts/
+INVENTORY.md

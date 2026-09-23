@@ -1,0 +1,15 @@
+# Submit every rule as a SLURM job.
+# Requires: pip install snakemake-executor-plugin-slurm
+#   snakemake --profile profiles/slurm
+# Set slurm_account / slurm_partition to your allocation before running.
+executor: slurm
+jobs: 200
+latency-wait: 60
+software-deployment-method: conda
+printshellcmds: true
+rerun-incomplete: true
+default-resources:
+  slurm_account: "your_account"
+  slurm_partition: "normal"
+  mem_mb: 8000
+  runtime: 720

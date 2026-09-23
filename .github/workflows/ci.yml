@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    name: R unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: envs/r.yaml
+          environment-name: r
+          cache-environment: true
+      - name: Run testthat suite
+        shell: bash -el {0}
+        run: Rscript tests/run_tests.R
+
+  pipeline:
+    name: Toy-data pipeline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: .github/ci-environment.yml
+          cache-environment: true
+      - name: Lint and dry run
+        shell: bash -el {0}
+        run: |
+          snakemake -s workflow/Snakefile --configfile config/test.yaml tests/mock.yaml --lint || true
+          snakemake -s workflow/Snakefile --configfile config/test.yaml tests/mock.yaml -n
+      - name: Run pipeline on toy data (mock QTLtools)
+        shell: bash -el {0}
+        run: |
+          snakemake -s workflow/Snakefile --cores 4 --sdm conda \
+            --configfile config/test.yaml tests/mock.yaml
+      - name: Check key outputs
+        shell: bash -el {0}
+        run: |
+          test -s results_test/qtl_qc/fdr_counts.tsv
+          test -s results_test/coloc/coloc_master.tsv
+          test -s results_test/pi1/pi1.tsv
+          test -s results_test/mediation/mediation_results.tsv
+          # the planted causal SNPs must be recovered as FDR cciQTL lead SNPs
+          zcat results_test/qtl/main/*.permute.annotated.tsv.gz | grep -q rs_causal_1
+          zcat results_test/qtl/main/*.permute.annotated.tsv.gz | grep -q rs_causal_2
+      - name: Upload results and logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: toy-run-logs
+          path: |
+            logs/
+            .snakemake/log/

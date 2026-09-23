@@ -1,0 +1,37 @@
+# cciQTL pipeline
+#
+#   01 genotype QC -> 02 phenotype BEDs -> 03 covariates -> 04 QTLtools cis
+#   (permutation + nominal) -> 05 QTL QC -> 06-11 downstream analyses + figures
+#
+# Run from the repository root:
+#   snakemake --profile profiles/local                          # config/config.yaml
+#   snakemake --profile profiles/local --configfile config/test.yaml
+
+from snakemake.utils import min_version, validate
+
+min_version("8.0")
+
+
+configfile: "config/config.yaml"
+
+
+validate(config, "../config/schema/config.schema.yaml")
+
+
+include: "rules/common.smk"
+include: "rules/01_genotype_qc.smk"
+include: "rules/02_phenotype.smk"
+include: "rules/03_covariates.smk"
+include: "rules/04_qtl_mapping.smk"
+include: "rules/05_qtl_qc.smk"
+include: "rules/06_coloc.smk"
+include: "rules/07_magma.smk"
+include: "rules/08_pi1.smk"
+include: "rules/09_mediation.smk"
+include: "rules/10_expression_cor.smk"
+include: "rules/11_figures.smk"
+
+
+rule all:
+    input:
+        all_targets(),
