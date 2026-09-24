@@ -63,3 +63,7 @@ qtlpost/vignettes/*.html
 # collaborator names and unpublished results.
 original_scripts/
 INVENTORY.md
+
+# ---- Site-specific configs and profiles (real paths, accounts) ----------------
+config/local/
+profiles/minerva/

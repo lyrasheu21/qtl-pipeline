@@ -116,7 +116,8 @@ def build_covsets():
         for name, use in (SENS.get("covariate_sets") or {}).items():
             covsets[f"cov_{name}"] = dict(main, use=list(use))
         for k in SENS.get("sweep_k") or []:
-            covsets[f"k{int(k)}"] = dict(main, hidden_k=int(k))
+            if int(k) != main["hidden_k"]:  # the main run already covers its own K
+                covsets[f"k{int(k)}"] = dict(main, hidden_k=int(k))
     return covsets
 
 
