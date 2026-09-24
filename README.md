@@ -149,6 +149,13 @@ docs/              output contract, rule graph, example figures
   Along the way the rewrite fixed a q-value grouping bug and a covariate-file bug, and replaced
   hand-typed summary figures with ones generated from results.
 
+## Acknowledgements
+
+This pipeline was developed with help from [Claude Code](https://claude.com/claude-code)
+(Anthropic's AI coding assistant), which I used to refactor my original analysis scripts into
+this workflow and to write tests and documentation. The analysis design and methodological
+choices are my own.
+
 ## License
 
 [MIT](LICENSE) © 2026 Lyra Sheu
