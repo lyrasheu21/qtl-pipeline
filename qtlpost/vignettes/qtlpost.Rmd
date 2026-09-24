@@ -1,0 +1,96 @@
+---
+title: "Downstream analysis of QTL results with qtlpost"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Downstream analysis of QTL results with qtlpost}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7, fig.height = 4.5)
+```
+
+`qtlpost` works on the standard outputs of the qtl-pipeline Snakemake
+workflow (see `docs/output_contract.md` in the pipeline repository): the
+annotated permutation table per phenotype set, the nominal associations of
+FDR-significant phenotypes, and the phenotype annotation. The pipeline calls
+the same functions for its batch runs; this vignette uses them interactively
+on the bundled synthetic toy data (60 donors, two planted causal variants,
+`rs_causal_1` and `rs_causal_2`).
+
+```{r packages, message = FALSE}
+library(qtlpost)
+library(data.table)
+library(ggplot2)
+ext <- function(f) system.file("extdata", f, package = "qtlpost")
+```
+
+## QTL results and FDR
+
+Each row of a permutation table is one phenotype (here a cell-cell
+interaction mapped at its ligand gene, set `cci_sending`, or at its receptor
+gene, `cci_receiving`) with its lead variant, beta-approximated permutation
+p-value and q-value.
+
+```{r results}
+qt <- rbind(fread(ext("cci_sending.permute.tsv.gz")), fread(ext("cci_receiving.permute.tsv.gz")))
+gt <- read_group_table(ext("cell_types.tsv"))
+qt[fdr_pass == TRUE, .(set, phenotype_id, group, gene, var_id, qval)][order(qval)][1:6]
+```
+
+q-values can be recomputed with a different stratification, e.g. one global
+q-value instead of one per anchor subclass:
+
+```{r requalify}
+qt[, qval_global := qvalue_by_group(adj_beta_pval, rep("all", .N))]
+qt[, .(per_group = sum(qval <= 0.05), global = sum(qval_global <= 0.05)), by = set]
+```
+
+```{r fdr-plot}
+counts <- fdr_summary(qt, by = c("set", "group"))
+plot_fdr_counts(counts, gt)
+```
+
+## Colocalisation with a GWAS
+
+`run_coloc()` tests every phenotype in a nominal table against one GWAS and
+classifies each colocalisation by how sharply it points at one SNP.
+
+```{r coloc, message = FALSE}
+nom <- fread(ext("cci_sending.nominal.fdr.tsv.gz"))
+spec <- list(name = "TOY_CC", snp_col = "SNP", bp_col = "BP", beta_col = "beta", se_col = "se",
+             p_col = "p", n_col = "N", type = "cc", s = 0.4)
+gwas <- standardize_gwas(fread(ext("gwas_toy_cc.tsv.gz")), spec)
+settings <- list(p1 = 1e-4, p2 = 1e-4, p12 = 1e-5, min_snps = 1, pp_h4 = 0.5, snp_pp_h4 = 0.1)
+res <- run_coloc(nom, gwas, spec, n_qtl = 59, settings = settings, label = list(set = "cci_sending"))
+res$summary[order(-PP.H4), .(phenotype_id, PP.H4, tier, lead_snp)][1:5]
+```
+
+```{r locus, fig.height = 7}
+top <- res$summary[order(-PP.H4)][1]
+d <- nom[phe_id == top$phenotype_id & var_id %chin% gwas$snp]
+plot_locus(d, gwas[snp %chin% d$var_id], res$results[[top$phenotype_id]],
+           title = top$phenotype_id, subtitle = sprintf("PP.H4 = %.3f", top$PP.H4),
+           annot = read_annotation(ext("gene_annotation.tsv")),
+           focus_gene = qt[phenotype_id == top$phenotype_id, gene][1])
+```
+
+## Choosing the number of hidden factors
+
+With `sensitivity.sweep_k` the pipeline re-runs the permutation pass for each
+number of hidden factors (e.g. PEER factors). Here, the toy CAGE-style data:
+
+```{r ksweep}
+sweep <- fread(ext("cage_sensitivity_summary.tsv"))
+sweep <- sweep[set == "cage", .SD[1], by = .(set, k)]
+plot_ksweep(sweep[, .(set, k, n_fdr_01, n_fdr_05, n_fdr_10)])
+```
+
+## Other functions
+
+- `pi1_replication()`: replication of QTL hits in an eQTL resource
+- `run_mediation()`: genotype → anchor expression → partner expression
+- `phenotype_expression_cor()`: phenotype vs expression of its gene
+- `magma_gene_sets()`, `read_magma_gsa()`, `plot_magma_heatmap()`: MAGMA gene-set analysis
+- `plot_upset_classes()`, `plot_coloc_summary()`, `plot_chord()`: summary figures

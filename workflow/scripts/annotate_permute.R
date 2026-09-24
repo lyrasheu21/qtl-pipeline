@@ -1,32 +1,23 @@
-# Annotate QTLtools permutation results and compute q-values per anchor
-# subclass.
-#
-# The anchor is the side the QTL was mapped at: the ligand's subclass/gene for
-# sending, the receptor's for receiving. q-values use the beta-approximated
-# permutation p-value (adj_beta_pval).
+# Standard permutation output for one set: QTLtools results joined to the
+# phenotype annotation, with q-values computed per `fdr_group_by` (per group,
+# class, superclass, or one global q-value with "none").
+source(file.path(snakemake@scriptdir, "load_qtlpost.R"))
 
-for (f in list.files(snakemake@params[["rdir"]], pattern = "\\.R$", full.names = TRUE)) source(f)
-start_logging(snakemake@log[[1]])
-
-direction <- snakemake@wildcards[["direction"]]
-fdr <- snakemake@params[["fdr"]]
-ct <- read_cell_types(snakemake@input[["cell_types"]])
-
+set_name <- snakemake@wildcards[["set"]]
+gt <- read_group_table(if (length(snakemake@input[["group_table"]])) snakemake@input[["group_table"]] else NULL)
 qt <- read_qtltools(snakemake@input[["permute"]], "permute")
-n_all <- nrow(qt)
-qt <- qt[!is.na(adj_beta_pval)]
-message(sprintf("%s: %d CCIs tested, %d with a cis variant", direction, n_all, nrow(qt)))
+annotation <- fread(snakemake@input[["annotation"]])
+message(sprintf("%s: %d phenotypes tested, %d with a cis variant", set_name, nrow(qt), sum(!is.na(qt$adj_beta_pval))))
 
-ann <- annotate_cci(qt$phe_id, direction, ct)
-out <- cbind(
-  qt[, .(phe_id, phe_chr, phe_from, phe_to, n_var_in_cis, var_id, var_chr, var_from,
-         dist_phe_var, slope, slope_se, nom_pval, r_squared, adj_emp_pval, adj_beta_pval)],
-  ann[, !"cci"]
-)
-out[, qval := qvalue_by_group(adj_beta_pval, subclass)]
-out[, fdr_pass := !is.na(qval) & qval <= fdr]
-setorder(out, qval)
-
-message(sprintf("%s: %d CCIs at q <= %g", direction, sum(out$fdr_pass), fdr))
+out <- annotate_permute(qt, annotation, gt, set_name, snakemake@params[["fdr_group_by"]], snakemake@params[["fdr"]])
+if (nrow(out)) {
+  summ <- fdr_summary(out, by = "set")
+  message(sprintf("%s: %d QTLs at q <= %g (pi0 = %.3f; %s)", set_name, summ$n_fdr, snakemake@params[["fdr"]],
+                  summ$pi0, pi0_diagnostic(summ$pi0)))
+} else {
+  message(set_name, ": no phenotypes with results")
+}
 write_tsv(out, snakemake@output[["table"]])
-writeLines(unique(out[fdr_pass == TRUE, phe_id]), snakemake@output[["fdr_ids"]])
+# keys as they appear in column 1 of the nominal output (the group ID for --grp-best runs)
+keys <- out[fdr_pass == TRUE, fifelse(is.na(grp_id), phenotype_id, grp_id)]
+writeLines(unique(keys), snakemake@output[["fdr_keys"]])

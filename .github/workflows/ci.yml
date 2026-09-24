@@ -8,7 +8,7 @@ on:
 
 jobs:
   unit-tests:
-    name: R unit tests
+    name: qtlpost unit tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,15 +17,62 @@ jobs:
           environment-file: envs/r.yaml
           environment-name: r
           cache-environment: true
+      - name: Install the package
+        shell: bash -el {0}
+        run: R CMD INSTALL qtlpost
       - name: Run testthat suite
         shell: bash -el {0}
-        run: Rscript tests/run_tests.R
+        run: Rscript qtlpost/tests/run_tests.R
+      - name: Build the package and its vignette
+        shell: bash -el {0}
+        run: R CMD build qtlpost
 
-  pipeline:
-    name: Toy-data pipeline
-    runs-on: ubuntu-latest
+  qtltools:
+    name: Build QTLtools 1.3.1
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: tools/bin/QTLtools
+          key: qtltools-1.3.1-${{ runner.os }}-${{ hashFiles('tools/qtltools/install_qtltools.sh') }}
+      - name: Install build dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential gfortran curl bzip2 \
+            libboost-iostreams-dev libboost-program-options-dev libgsl-dev \
+            zlib1g-dev libbz2-dev liblzma-dev libcurl4-openssl-dev libssl-dev libpcre2-dev
+      - name: Build QTLtools
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash tools/qtltools/install_qtltools.sh tools
+      - name: Check the binary runs
+        run: tools/bin/QTLtools --help 2>&1 | head -5
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qtltools-bin
+          path: tools/bin/QTLtools
+
+  pipeline:
+    name: Toy pipeline (${{ matrix.config }})
+    needs: qtltools
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [cci, cage, matrix]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: qtltools-bin
+          path: tools/bin
+      - name: Runtime libraries for QTLtools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgsl27 libgslcblas0 libcurl4
+          chmod +x tools/bin/QTLtools
       - uses: mamba-org/setup-micromamba@v2
         with:
           environment-file: .github/ci-environment.yml
@@ -33,28 +80,27 @@ jobs:
       - name: Lint and dry run
         shell: bash -el {0}
         run: |
-          snakemake -s workflow/Snakefile --configfile config/test.yaml tests/mock.yaml --lint || true
-          snakemake -s workflow/Snakefile --configfile config/test.yaml tests/mock.yaml -n
-      - name: Run pipeline on toy data (mock QTLtools)
+          snakemake -s workflow/Snakefile --configfile tests/configs/${{ matrix.config }}.yaml tests/configs/real_qtltools.yaml --lint || true
+          snakemake -s workflow/Snakefile --configfile tests/configs/${{ matrix.config }}.yaml tests/configs/real_qtltools.yaml -n
+      - name: Run pipeline with real QTLtools
         shell: bash -el {0}
         run: |
           snakemake -s workflow/Snakefile --cores 4 --sdm conda \
-            --configfile config/test.yaml tests/mock.yaml
-      - name: Check key outputs
+            --configfile tests/configs/${{ matrix.config }}.yaml tests/configs/real_qtltools.yaml
+      - name: Planted causal variants are recovered as FDR QTL lead SNPs
         shell: bash -el {0}
         run: |
-          test -s results_test/qtl_qc/fdr_counts.tsv
-          test -s results_test/coloc/coloc_master.tsv
-          test -s results_test/pi1/pi1.tsv
-          test -s results_test/mediation/mediation_results.tsv
-          # the planted causal SNPs must be recovered as FDR cciQTL lead SNPs
-          zcat results_test/qtl/main/*.permute.annotated.tsv.gz | grep -q rs_causal_1
-          zcat results_test/qtl/main/*.permute.annotated.tsv.gz | grep -q rs_causal_2
-      - name: Upload results and logs on failure
+          out=results_test/${{ matrix.config }}/qtl/main
+          zcat $out/*.permute.tsv.gz | awk -F'\t' 'NR == 1 { for (i = 1; i <= NF; i++) c[$i] = i; next }
+            $c["fdr_pass"] == "TRUE" { print $c["var_id"] }' | sort -u > lead_snps.txt
+          cat lead_snps.txt
+          grep -qx rs_causal_1 lead_snps.txt
+          grep -qx rs_causal_2 lead_snps.txt
+      - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: toy-run-logs
+          name: logs-${{ matrix.config }}
           path: |
-            logs/
+            results_test/${{ matrix.config }}/logs/
             .snakemake/log/

@@ -1,21 +1,25 @@
-"""05 QTL QC: annotate permutation results, per-subclass q-values, summary
-plots, genomic inflation, and nominal results for FDR-significant CCIs."""
+"""05 QTL QC and standard outputs: annotated permutation results with
+q-values, diagnostics, genomic inflation, nominal results for FDR hits and
+sensitivity / hidden-factor sweep summaries."""
 
 MAIN = f"{RES}/qtl/main"
 
 
 rule annotate_permute:
     input:
-        permute=f"{RES}/qtl/{{variant}}/{{direction}}.permute.txt.gz",
-        cell_types=INPUTS["cell_types"],
+        permute=f"{RES}/qtl/{{variant}}/{{set}}.permute.raw.txt.gz",
+        annotation=f"{RES}/phenotypes/{{set}}.annotation.tsv",
+        group_table=INPUTS["group_table"] if INPUTS.get("group_table") else [],
     output:
-        table=f"{RES}/qtl/{{variant}}/{{direction}}.permute.annotated.tsv.gz",
-        fdr_ids=f"{RES}/qtl/{{variant}}/{{direction}}.fdr_ids.txt",
+        table=f"{RES}/qtl/{{variant}}/{{set}}.permute.tsv.gz",
+        fdr_keys=f"{RES}/qtl/{{variant}}/{{set}}.fdr_keys.txt",
     params:
-        rdir=R_DIR,
+        rdir=QTLPOST_R,
+        qtlpost_md5=QTLPOST_MD5,
         fdr=config["qtl_qc"]["fdr"],
+        fdr_group_by=lambda wc: set_fdr_group(wc.set),
     log:
-        f"{LOGS}/qtl/{{variant}}.{{direction}}.annotate.log",
+        f"{LOGS}/qtl/{{variant}}.{{set}}.annotate.log",
     conda:
         "../../envs/r.yaml"
     script:
@@ -24,16 +28,17 @@ rule annotate_permute:
 
 rule qtl_summary:
     input:
-        sending=f"{MAIN}/sending.permute.annotated.tsv.gz",
-        receiving=f"{MAIN}/receiving.permute.annotated.tsv.gz",
-        cell_types=INPUTS["cell_types"],
+        tables=expand(f"{MAIN}/{{set}}.permute.tsv.gz", set=list(SETS)),
+        group_table=INPUTS["group_table"] if INPUTS.get("group_table") else [],
     output:
-        counts=f"{RES}/qtl_qc/fdr_counts.tsv",
+        summary=f"{RES}/qtl_qc/fdr_summary.tsv",
         dotplot=f"{RES}/qtl_qc/fdr_dotplot.pdf",
         qq=f"{RES}/qtl_qc/permute_qq.pdf",
-        shared=f"{RES}/qtl_qc/shared_snp_hits.tsv",
+        hist=f"{RES}/qtl_qc/pvalue_histograms.pdf",
+        shared=f"{RES}/qtl_qc/shared_lead_snps.tsv",
     params:
-        rdir=R_DIR,
+        rdir=QTLPOST_R,
+        qtlpost_md5=QTLPOST_MD5,
     log:
         f"{LOGS}/qtl_summary.log",
     conda:
@@ -43,36 +48,39 @@ rule qtl_summary:
 
 
 rule nominal_pvalue_sample:
-    """Random sample of nominal p-values (column 12) for lambda and QQ plots."""
+    """Random sample of nominal p-values for lambda and QQ plots (column 12,
+    or 14 for grouped runs, which have two extra columns)."""
     input:
-        expand(f"{MAIN}/{{{{direction}}}}/nominal/chunk{{chunk}}.txt.gz", chunk=CHUNKS),
+        expand(f"{MAIN}/{{{{set}}}}/nominal/chunk{{chunk}}.txt.gz", chunk=CHUNKS),
     output:
-        f"{RES}/qtl_qc/nominal_pvalues.{{direction}}.txt",
+        f"{RES}/qtl_qc/nominal_pvalues.{{set}}.txt",
     params:
         fraction=config["qtl_qc"]["nominal_sample_fraction"],
         seed=config["qtl_qc"].get("seed", 42),
+        col=lambda wc: 14 if set_grouped(wc.set) else 12,
     log:
-        f"{LOGS}/nominal_pvalue_sample.{{direction}}.log",
+        f"{LOGS}/nominal_pvalue_sample.{{set}}.log",
     conda:
         "../../envs/genotype.yaml"
     shell:
         """
         for f in {input}; do gzip -dc "$f"; done \
-          | awk -v frac={params.fraction} -v seed={params.seed} \
-              'BEGIN {{ srand(seed) }} $1 != "phe_id" && rand() < frac {{ print $12 }}' \
+          | awk -v frac={params.fraction} -v seed={params.seed} -v col={params.col} \
+              'BEGIN {{ srand(seed) }} $1 != "phe_id" && $1 != "grp_id" && rand() < frac {{ print $col }}' \
           > {output} 2> {log}
         """
 
 
 rule nominal_lambda:
     input:
-        sending=f"{RES}/qtl_qc/nominal_pvalues.sending.txt",
-        receiving=f"{RES}/qtl_qc/nominal_pvalues.receiving.txt",
+        expand(f"{RES}/qtl_qc/nominal_pvalues.{{set}}.txt", set=list(SETS)),
     output:
         table=f"{RES}/qtl_qc/nominal_lambda.tsv",
         qq=f"{RES}/qtl_qc/nominal_qq.pdf",
     params:
-        rdir=R_DIR,
+        rdir=QTLPOST_R,
+        qtlpost_md5=QTLPOST_MD5,
+        sets=list(SETS),
     log:
         f"{LOGS}/nominal_lambda.log",
     conda:
@@ -82,42 +90,38 @@ rule nominal_lambda:
 
 
 rule extract_fdr_nominal:
-    """All nominal associations of the FDR-significant CCIs (input to coloc)."""
+    """All nominal associations of the FDR-significant phenotypes, with named
+    columns (the input to colocalisation)."""
     input:
-        ids=f"{MAIN}/{{direction}}.fdr_ids.txt",
-        chunks=expand(f"{MAIN}/{{{{direction}}}}/nominal/chunk{{chunk}}.txt.gz", chunk=CHUNKS),
+        fdr_keys=f"{MAIN}/{{set}}.fdr_keys.txt",
+        chunks=expand(f"{MAIN}/{{{{set}}}}/nominal/chunk{{chunk}}.txt.gz", chunk=CHUNKS),
     output:
-        f"{MAIN}/{{direction}}.nominal.fdr.txt.gz",
+        raw=temp(f"{MAIN}/{{set}}.nominal.fdr.raw.txt"),
+        table=f"{MAIN}/{{set}}.nominal.fdr.tsv.gz",
+    params:
+        rdir=QTLPOST_R,
+        qtlpost_md5=QTLPOST_MD5,
     log:
-        f"{LOGS}/extract_fdr_nominal.{{direction}}.log",
+        f"{LOGS}/extract_fdr_nominal.{{set}}.log",
     conda:
-        "../../envs/genotype.yaml"
-    shell:
-        """
-        if [ -s {input.ids} ]; then
-          for f in {input.chunks}; do gzip -dc "$f"; done \
-            | awk 'NR == FNR {{ ids[$1]; next }} $1 in ids' {input.ids} - \
-            | gzip -c > {output}
-        else
-          : | gzip -c > {output}
-        fi 2> {log}
-        """
+        "../../envs/r.yaml"
+    script:
+        "../scripts/extract_fdr_nominal.R"
 
 
 rule sensitivity_summary:
     input:
-        expand(
-            f"{RES}/qtl/{{variant}}/{{direction}}.permute.annotated.tsv.gz",
-            variant=list(VARIANTS),
-            direction=DIRECTIONS,
-        ),
+        expand(f"{RES}/qtl/{{variant}}/{{set}}.permute.tsv.gz", variant=list(VARIANTS), set=list(SETS)),
     output:
-        table=f"{RES}/qtl_qc/sensitivity_fdr_counts.tsv",
-        plot=f"{RES}/qtl_qc/sensitivity_fdr_counts.pdf",
+        table=f"{RES}/qtl_qc/sensitivity_summary.tsv",
+        plot=f"{RES}/qtl_qc/sensitivity_summary.pdf",
     params:
-        rdir=R_DIR,
-        variants=[v for v in VARIANTS for d in DIRECTIONS],
+        rdir=QTLPOST_R,
+        qtlpost_md5=QTLPOST_MD5,
+        variants=[v for v in VARIANTS for s in SETS],
+        sets=[s for v in VARIANTS for s in SETS],
         variant_info=VARIANTS,
+        covsets=COVSETS,
     log:
         f"{LOGS}/sensitivity_summary.log",
     conda:

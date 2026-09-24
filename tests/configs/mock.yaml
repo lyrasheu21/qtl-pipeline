@@ -1,0 +1,5 @@
+# Local-testing override: use the mock QTLtools in tests/mock instead of the
+# real binary (QTLtools only ships Linux builds). Never use for real data.
+#   snakemake --profile profiles/local --configfile tests/configs/cci.yaml tests/configs/mock.yaml
+qtl:
+  qtltools_binary: "tests/mock/QTLtools"

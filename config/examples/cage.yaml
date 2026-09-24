@@ -1,0 +1,56 @@
+# CAGE-seq promoter/enhancer QTLs (bed adapter). Mirrors the original CAGE-seq
+# analysis: pre-cleaned VCF, ready-made peak BED, 5 genotype PCs + K PEER
+# factors (PEER computed elsewhere, keyed by CAGE sample IDs), one global
+# q-value, and a PEER-K sweep. Replace the /path/to/ placeholders.
+#
+#   snakemake --profile profiles/lsf --configfile config/examples/cage.yaml
+
+results_dir: "results/cage"
+
+modules:
+  coloc: false            # set true and fill config/gwas.tsv
+  magma: false
+  pi1: false
+  mediation: false
+  expression_cor: false
+  sensitivity: true       # runs the PEER-K sweep below
+
+inputs:
+  gene_annotation: "/path/to/gene_annotation.tsv"   # for locus plots / MAGMA
+
+genotypes:
+  vcf: "/path/to/genotypes.vcf.gz"                  # already cleaned and subset to donors
+  qc:
+    enabled: false
+  pcs:
+    source: "file"
+    file: "/path/to/genotype.pca"                   # PCs as rows or samples as rows
+
+phenotypes:
+  cage:
+    adapter: bed
+    bed: "/path/to/phenotypes.bed.gz"
+    group: "DLPFC"                                   # label used in plots / q-value strata
+    fdr_group_by: none                               # one global q-value
+    # grouped_permutation: true                      # test peaks of the same gene (BED gid) together
+
+covariates:
+  genotype_pcs: 5
+  hidden_factors:
+    source: "file"
+    file: "/path/to/PEER_factors.RDATA"
+    object: "hidden_factors"                          # samples x factors matrix inside the RDATA
+    sample_map: {file: "/path/to/genotype_matches.csv", from: "sample_id", to: "donor_id"}
+    k: 33
+  min_donors: 50
+
+qtl:
+  qtltools_binary: "QTLtools"
+  n_chunks: 22
+  n_permutations: 1000
+  window: 1000000
+  seed: 12345
+
+sensitivity:
+  n_permutations: 1000
+  sweep_k: [0, 5, 10, 15, 20, 30, 33]

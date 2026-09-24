@@ -1,0 +1,4 @@
+# CI override: use QTLtools built by tools/qtltools/install_qtltools.sh.
+#   snakemake --configfile tests/configs/<test>.yaml tests/configs/real_qtltools.yaml
+qtl:
+  qtltools_binary: "tools/bin/QTLtools"

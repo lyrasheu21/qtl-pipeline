@@ -1,0 +1,32 @@
+Package: qtlpost
+Type: Package
+Title: Downstream Analysis of QTLtools cis-QTL Results
+Version: 0.1.0
+Authors@R: person("Lyra", "Sheu", role = c("aut", "cre"),
+    email = "140650222+lyrasheu21@users.noreply.github.com")
+Description: Functions for working with the standard outputs of the qtl-pipeline
+    Snakemake workflow (or any QTLtools cis results): reading and annotating
+    permutation/nominal output, per-group q-values, covariate assembly,
+    colocalisation with GWAS (coloc), MAGMA gene sets, pi1 replication in eQTL
+    resources, mediation analysis, and summary / locus plots.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Depends: R (>= 4.1)
+Imports:
+    data.table,
+    ggplot2,
+    qvalue,
+    limma,
+    coloc,
+    patchwork,
+    mediation,
+    UpSetR,
+    circlize
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown,
+    arrow,
+    R.utils
+VignetteBuilder: knitr
+Config/testthat/edition: 3

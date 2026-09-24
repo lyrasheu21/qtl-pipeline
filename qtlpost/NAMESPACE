@@ -1,0 +1,7 @@
+# Exports every function whose name starts with a lower-case letter.
+exportPattern("^[a-z]")
+export("%||%")
+import(data.table)
+import(ggplot2)
+importFrom(stats, anova, cor, lm, median, p.adjust, pchisq, pnorm, ppoints, prcomp, qchisq, qnorm, qt, sd, setNames)
+importFrom(utils, head)

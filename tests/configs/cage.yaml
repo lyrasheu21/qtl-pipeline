@@ -1,0 +1,72 @@
+# Toy test mirroring the CAGE-seq workflow: a ready-made peak BED (bed adapter),
+# genotypes used as-is (QC off), 5 genotype PCs from a .pca file, PEER-like
+# hidden factors from an .RData keyed by assay sample IDs (with a sample map
+# and one replicate pair), one global q-value, and a hidden-factor K sweep.
+# A second set runs the same peaks with --grp-best (peaks grouped by gene).
+#   snakemake --profile profiles/local --configfile tests/configs/cage.yaml [tests/configs/mock.yaml]
+
+results_dir: "results_test/cage"
+
+modules:
+  coloc: true
+  magma: false
+  pi1: true
+  mediation: false          # needs partner genes (cci adapter)
+  expression_cor: true
+  sensitivity: true
+
+inputs:
+  gene_annotation: "tests/data/gene_annotation.tsv"
+  expression_pattern: "tests/data/expression/{group}.tsv.gz"
+  gwas_table: "tests/data/gwas.tsv"
+
+chromosomes: [1, 2]
+
+genotypes:
+  vcf: "tests/data/genotypes.vcf.gz"
+  qc:
+    enabled: false
+  pcs:
+    source: "file"
+    file: "tests/data/cage/genotype.pca"
+
+phenotypes:
+  cage:
+    adapter: bed
+    bed: "tests/data/cage/phenotypes.bed.gz"
+    group: "DLPFC"
+    fdr_group_by: none
+  cage_gene:
+    adapter: bed
+    bed: "tests/data/cage/phenotypes.bed.gz"
+    group: "DLPFC"
+    fdr_group_by: none
+    grouped_permutation: true
+
+covariates:
+  genotype_pcs: 5
+  hidden_factors:
+    source: "file"
+    file: "tests/data/cage/peer_factors.RData"
+    object: "hidden_factors"
+    sample_map: {file: "tests/data/cage/sample_map.csv", from: "sample_id", to: "donor_id"}
+    k: 3
+  min_donors: 30
+
+qtl:
+  n_chunks: 2
+  n_permutations: 100
+  seed: 12345
+
+qtl_qc:
+  nominal_sample_fraction: 0.5
+
+sensitivity:
+  n_permutations: 100
+  sweep_k: [0, 1, 3, 5]
+
+coloc:
+  max_locus_plots: 3
+
+pi1:
+  eqtl_pattern: "tests/data/eqtl/eqtl_{group}_chr{chr}.tsv.gz"

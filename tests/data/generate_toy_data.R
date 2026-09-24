@@ -1,8 +1,15 @@
-# Generate the small synthetic dataset used by config/test.yaml.
+# Generate the small synthetic datasets used by tests/configs/*.yaml.
 #
 #   Rscript tests/data/generate_toy_data.R
 #
-# 60 donors, 2 chromosomes, 6 genes, ~20 CCIs. Two causal SNPs are planted:
+# Shared: 60 donors, 2 chromosomes, 6 genes, GWAS, eQTL and expression files.
+#   CCI    (tests/data/cci_matrix.tsv.gz): ~20 CCIs for the cci adapter
+#   CAGE   (tests/data/cage/): peak BED (5 peaks per gene, gid = gene) for the
+#          bed adapter, PEER-like factors in an .RData keyed by assay sample
+#          IDs (one replicate pair) + sample map, genotype PCs as a .pca file
+#   matrix (tests/data/matrix/): expression matrix with assay sample IDs,
+#          coordinates table and sample map for the matrix adapter
+# Two causal SNPs are planted:
 #   rs_causal_1 (chr1, near LIGA) raises every LIGA-containing CCI score, LIGA
 #     expression, the TOY_CC GWAS signal and the LIGA eQTL; RECA expression
 #     partly follows LIGA (a mediation signal).
@@ -146,4 +153,81 @@ for (sc in subclasses) for (chr in c("1", "2")) {
 ct <- fread("config/cell_types.tsv")[subclass %in% subclasses]
 fwrite(ct, file.path(out_dir, "cell_types.tsv"), sep = "\t")
 
-message("Toy data written to ", out_dir, ": ", nrow(snps), " SNPs, ", length(ccis), " CCIs, ", n_donors, " donors")
+
+
+# Extra groups used by the CAGE ("DLPFC") and matrix ("BulkBrain") examples -----
+set.seed(163)
+for (grp in c("DLPFC", "BulkBrain")) {
+  e <- matrix(rnorm(nrow(genes) * n_donors), nrow = nrow(genes), dimnames = list(genes$gene_name, donors))
+  e["LIGA", ] <- 0.9 * scale(g1)[, 1] + rnorm(n_donors, 0, 0.6)
+  e["RECB", ] <- 0.9 * scale(g2)[, 1] + rnorm(n_donors, 0, 0.6)
+  fwrite(data.table(gene = rownames(e), round(e, 4)), file.path(out_dir, "expression", paste0(grp, ".tsv.gz")), sep = "\t")
+  for (chr in c("1", "2")) {
+    s_chr <- snps[chrom == chr]
+    gs <- genes[sub("chr", "", chrom) == chr, gene_name]
+    rows <- CJ(snp = s_chr$id, gene = gs)
+    rows[, pos := s_chr$pos[match(snp, s_chr$id)]]
+    rows[, z := rnorm(.N)]
+    rows[snp == "rs_causal_1" & gene == "LIGA", z := 7]
+    rows[snp == "rs_causal_2" & gene == "RECB", z := -7]
+    rows[, se := 0.05]
+    out <- rows[, .(chr, pos, pos + 1, snp, "A", "G", gene, round(z * se, 5), se, round(z, 4))]
+    fwrite(out, file.path(out_dir, "eqtl", sprintf("eqtl_%s_chr%s.tsv.gz", grp, chr)), sep = "\t", col.names = FALSE)
+  }
+}
+
+# CAGE-seq style peaks (bed adapter) --------------------------------------------
+set.seed(1631)
+cage_dir <- file.path(out_dir, "cage")
+dir.create(cage_dir, showWarnings = FALSE)
+hidden <- matrix(rnorm(n_donors * 3), ncol = 3, dimnames = list(donors, NULL))  # unmeasured confounders
+peaks <- rbindlist(lapply(seq_len(nrow(genes)), function(i) {
+  data.table(chr = sub("chr", "", genes$chrom[i]), start = genes$start[i] + c(-300, 0, 150, 400, 900),
+             gene = genes$gene_name[i], k = 1:5)
+}))
+peaks[, `:=`(end = start + 100, pid = sprintf("peak_%s_%d", gene, k), strand = "+")]
+loadings <- matrix(rnorm(nrow(peaks) * 3, sd = 1.5), ncol = 3)
+values <- 10 + loadings %*% t(hidden) + matrix(rnorm(nrow(peaks) * n_donors), nrow = nrow(peaks))
+values[peaks$gene == "LIGA" & peaks$k <= 2, ] <- values[peaks$gene == "LIGA" & peaks$k <= 2, ] + rep(1.5 * g1, each = 2)
+values[peaks$gene == "RECB" & peaks$k <= 3, ] <- values[peaks$gene == "RECB" & peaks$k <= 3, ] + rep(1.5 * g2, each = 3)
+colnames(values) <- donors
+cage_bed <- cbind(peaks[, .(`#chr` = chr, start, end, pid, gid = gene, strand)], as.data.table(round(values, 4)))
+setorder(cage_bed, `#chr`, start)
+fwrite(cage_bed, file.path(cage_dir, "phenotypes.bed.gz"), sep = "\t")
+
+# PEER-like hidden factors keyed by CAGE sample IDs, one donor sequenced twice
+cage_ids <- sprintf("CAGE_S%03d", seq_len(n_donors))
+sample_map <- data.table(sample_id = c(cage_ids, "CAGE_S005_rep"), donor_id = c(donors, "D005"))
+fwrite(sample_map, file.path(cage_dir, "sample_map.csv"))
+f_true <- rbind(hidden, hidden["D005", , drop = FALSE])
+hidden_factors <- cbind(f_true + matrix(rnorm(length(f_true), sd = 0.1), ncol = 3),
+                        matrix(rnorm(nrow(f_true) * 2), ncol = 2))
+rownames(hidden_factors) <- sample_map$sample_id
+save(hidden_factors, file = file.path(cage_dir, "peer_factors.RData"))
+
+# Genotype PCs with PCs as rows and donors as columns (like a .pca file)
+pca <- matrix(rnorm(5 * n_donors), nrow = 5, dimnames = list(sprintf("subset_toy_PC%d", 1:5), donors))
+fwrite(data.table(SampleID = rownames(pca), round(pca, 5)), file.path(cage_dir, "genotype.pca"), sep = "\t")
+
+# eQTL-style expression matrix (matrix adapter) ---------------------------------
+set.seed(1632)
+mat_dir <- file.path(out_dir, "matrix")
+dir.create(mat_dir, showWarnings = FALSE)
+extra <- data.table(feature_id = sprintf("GENE%02d", 7:16), chrom = rep(c("chr1", "chr2"), each = 5),
+                    start = c(seq(1200000, 3800000, length.out = 5), seq(2300000, 5600000, length.out = 5)))
+coords <- rbind(genes[, .(feature_id = gene_name, chrom, start)], extra)
+coords[, `:=`(end = start + 15000, strand = "+", gene = feature_id)]
+fwrite(coords, file.path(mat_dir, "coordinates.tsv"), sep = "\t")
+hidden2 <- matrix(rnorm(n_donors * 2), ncol = 2)
+expr <- 5 + matrix(rnorm(nrow(coords) * 2, sd = 1.2), ncol = 2) %*% t(hidden2) +
+  matrix(rnorm(nrow(coords) * n_donors), nrow = nrow(coords))
+expr[coords$feature_id == "LIGA", ] <- expr[coords$feature_id == "LIGA", ] + 1.5 * g1
+expr[coords$feature_id == "RECB", ] <- expr[coords$feature_id == "RECB", ] + 1.5 * g2
+rna_ids <- sprintf("RNA_%s", donors)
+colnames(expr) <- rna_ids
+expr <- cbind(expr, RNA_D010_rep = expr[, "RNA_D010"] + rnorm(nrow(coords), sd = 0.2))
+fwrite(data.table(feature_id = coords$feature_id, round(expr, 4)), file.path(mat_dir, "expression.tsv.gz"), sep = "\t")
+fwrite(data.table(rna_sample = c(rna_ids, "RNA_D010_rep"), donor = c(donors, "D010")), file.path(mat_dir, "sample_map.tsv"), sep = "\t")
+
+message("Toy data written to ", out_dir, ": ", nrow(snps), " SNPs, ", length(ccis), " CCIs, ",
+        nrow(peaks), " CAGE peaks, ", nrow(coords), " expression features, ", n_donors, " donors")

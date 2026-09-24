@@ -41,6 +41,15 @@ logs/
 !tests/data/
 !tests/data/**
 
+# ---- QTLtools built by tools/qtltools/install_qtltools.sh ---------------------
+tools/bin/
+tools/build/
+
+# ---- R package build artefacts ------------------------------------------------
+qtlpost_*.tar.gz
+qtlpost.Rcheck/
+qtlpost/vignettes/*.html
+
 # ---- Editors / OS / R --------------------------------------------------------
 .DS_Store
 .Rhistory

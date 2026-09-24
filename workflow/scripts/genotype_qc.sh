@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# Genotype QC with plink 1.9.
+# Genotype preparation and QC with plink 1.9.
 #
 #   1. import (bfile or VCF), keep listed donors, restrict to chromosomes
 #   2. optionally update sample IDs
-#   3. --geno / --maf / --hwe filters
-#   4. --test-mishap; drop variants whose haplotype-missingness p < --mishap-p
+#   3. --geno / --maf / --hwe filters                          (skipped with --qc 0)
+#   4. --test-mishap; drop variants whose haplotype-missingness
+#      p < --mishap-p                                          (skipped with --qc 0)
 #   5. write a bgzipped, tabix-indexed VCF (sample IDs = IIDs)
 #
 # Writes <out>.vcf.gz, <out>.vcf.gz.tbi and <out>_summary.tsv.
 set -euo pipefail
 
-in_type="" in_path="" keep="" update_ids="" chroms="" threads=1 out=""
+in_type="" in_path="" keep="" update_ids="" chroms="" threads=1 out="" qc=1
 geno="" maf="" hwe="" mishap_p=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -25,6 +26,7 @@ while [[ $# -gt 0 ]]; do
     --mishap-p) mishap_p="$2" ;;
     --threads) threads="$2" ;;
     --out) out="$2" ;;
+    --qc) qc="$2" ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
   shift 2
@@ -51,26 +53,35 @@ fi
 n_var_in=$(count "$current.bim")
 n_sample_in=$(count "$current.fam")
 
-# 3. missingness / MAF / HWE
-plink --bfile "$current" "${plink_common[@]}" --geno "$geno" --maf "$maf" --hwe "$hwe" \
-  --make-bed --out "$work/step3_filters"
-n_var_filters=$(count "$work/step3_filters.bim")
+if [[ "$qc" == "1" ]]; then
+  # 3. missingness / MAF / HWE
+  plink --bfile "$current" "${plink_common[@]}" --geno "$geno" --maf "$maf" --hwe "$hwe" \
+    --make-bed --out "$work/step3_filters"
+  current="$work/step3_filters"
+  n_var_filters=$(count "$current.bim")
 
-# 4. haplotype-based test for non-random missingness
-plink --bfile "$work/step3_filters" "${plink_common[@]}" --test-mishap --out "$work/step4_mishap"
-exclude="$work/mishap_exclude.txt"
-if [[ -f "$work/step4_mishap.missing.hap" ]]; then
-  awk -v p="$mishap_p" 'NR > 1 && $8 != "NA" && $8 + 0 < p { print $1 }' "$work/step4_mishap.missing.hap" \
-    | sort -u > "$exclude"
+  # 4. haplotype-based test for non-random missingness
+  plink --bfile "$current" "${plink_common[@]}" --test-mishap --out "$work/step4_mishap"
+  exclude="$work/mishap_exclude.txt"
+  if [[ -f "$work/step4_mishap.missing.hap" ]]; then
+    awk -v p="$mishap_p" 'NR > 1 && $8 != "NA" && $8 + 0 < p { print $1 }' "$work/step4_mishap.missing.hap" \
+      | sort -u > "$exclude"
+  else
+    : > "$exclude"
+  fi
+  n_mishap=$(count "$exclude")
 else
+  echo "QC disabled: writing genotypes without variant filters"
+  n_var_filters="NA"
+  n_mishap="NA"
+  exclude="$work/mishap_exclude.txt"
   : > "$exclude"
 fi
-n_mishap=$(count "$exclude")
 
 # 5. exclude and write VCF
 exclude_arg=()
 [[ -s "$exclude" ]] && exclude_arg=(--exclude "$exclude")
-plink --bfile "$work/step3_filters" "${plink_common[@]}" ${exclude_arg[@]+"${exclude_arg[@]}"} \
+plink --bfile "$current" "${plink_common[@]}" ${exclude_arg[@]+"${exclude_arg[@]}"} \
   --recode vcf-iid bgz --out "$out"
 tabix -f -p vcf "$out.vcf.gz"
 n_var_out=$(bcftools view -H "$out.vcf.gz" | wc -l | tr -d ' ')

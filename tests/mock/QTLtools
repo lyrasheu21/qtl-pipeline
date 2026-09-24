@@ -1,10 +1,11 @@
 #!/usr/bin/env Rscript
 # Minimal stand-in for `QTLtools cis`, for testing the pipeline on machines
 # where QTLtools is unavailable (it only ships Linux binaries). NOT for real
-# analyses. Selected with:  --configfile config/test.yaml tests/mock.yaml
+# analyses. Selected with:  --configfile tests/configs/<test>.yaml tests/configs/mock.yaml
 #
 # Supports the options the pipeline uses: --vcf --bed --cov --out --permute N
-# --nominal T --window --seed --normal --std-err --chunk k n --exclude-samples.
+# --nominal T --window --seed --normal --std-err --chunk k n --exclude-samples
+# --grp-best (groups = BED gid column; output layout as QTLtools v1.3.1).
 # Association = linear regression of the (rank-normalised) phenotype on
 # genotype dosage after regressing out covariates. Permutation p-values use the
 # same beta approximation idea as QTLtools. Output columns match QTLtools v1.3
@@ -15,7 +16,7 @@ suppressPackageStartupMessages(library(data.table))
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) == 0 || args[1] != "cis") stop("mock QTLtools only implements 'cis'")
 args <- args[-1]
-opt <- list(window = 1e6, seed = 1, normal = FALSE, chunk = c(1, 1), exclude = NULL)
+opt <- list(window = 1e6, seed = 1, normal = FALSE, chunk = c(1, 1), exclude = NULL, grp = FALSE)
 i <- 1
 while (i <= length(args)) {
   a <- args[i]
@@ -32,6 +33,7 @@ while (i <= length(args)) {
     "--chunk" = { opt$chunk <- as.integer(args[(i + 1):(i + 2)]); i <- i + 2 },
     "--normal" = { opt$normal <- TRUE },
     "--std-err" = {},
+    "--grp-best" = { opt$grp <- TRUE },
     stop("mock QTLtools: unsupported option ", a)
   )
   i <- i + 1
@@ -70,53 +72,76 @@ for (n in names(cv)) {
   cv[[n]] <- if (all(!is.na(num))) num else factor(cv[[n]])
 }
 
+# phenotype -> group (each phenotype is its own group unless --grp-best)
+bed[, grp := if (opt$grp) gid else pid]
 lines <- character()
-for (k in seq_len(nrow(bed))) {
-  ph <- bed[k]
-  y <- as.numeric(unlist(ph[, ..samples]))
-  keep <- !is.na(y)
-  if (opt$normal) y[keep] <- qnorm((rank(y[keep]) - 0.5) / sum(keep))
-  X <- model.matrix(~ ., data = cv[keep, , drop = FALSE])
-  resid <- function(v) as.numeric(v - X %*% qr.solve(X, v))
-  ry <- resid(y[keep])
+for (gname in unique(bed$grp)) {
+  members <- bed[grp == gname]
+  ph <- members[1]
   cis <- which(as.character(vcf$CHROM) == sub("^chr", "", ph$chr) &
-               vcf$POS >= ph$start - opt$window & vcf$POS <= ph$end + opt$window)
-  rg <- if (length(cis)) t(apply(G[cis, keep, drop = FALSE], 1, resid)) else matrix(nrow = 0, ncol = sum(keep))
-  if (length(cis) == 1) rg <- matrix(rg, nrow = 1)
-  ok <- apply(rg, 1, function(v) sd(v) > 1e-8)
-  cis <- cis[ok]; rg <- rg[ok, , drop = FALSE]
-  dof <- sum(keep) - ncol(X) - 1
-
-  assoc <- function(yv) {
-    r <- as.numeric(cor(t(rg), yv))
-    t_stat <- r * sqrt(dof / pmax(1 - r^2, 1e-12))
-    list(r = r, t = t_stat, p = 2 * pt(-abs(t_stat), dof))
+               vcf$POS >= min(members$start) - opt$window & vcf$POS <= max(members$end) + opt$window)
+  head_of <- function(m, best_pid) {
+    id <- if (opt$grp) gname else m$pid
+    extra <- if (opt$grp) sprintf(" %s %d", best_pid, nrow(members)) else ""
+    sprintf("%s %s %d %d %s%s %d", id, sub("^chr", "", m$chr), m$start, m$end, m$strand, extra, length(cis))
   }
-  base <- sprintf("%s %s %d %d %s %d", ph$pid, sub("^chr", "", ph$chr), ph$start, ph$end, ph$strand, length(cis))
-  if (!length(cis)) {
-    if (!is.null(opt$permute)) lines <- c(lines, paste(base, paste(rep("NA", 15), collapse = " ")))
+  # per phenotype: residualised y and genotypes
+  fits <- lapply(seq_len(nrow(members)), function(k) {
+    m <- members[k]
+    y <- as.numeric(unlist(m[, ..samples]))
+    keep <- !is.na(y)
+    if (opt$normal) y[keep] <- qnorm((rank(y[keep]) - 0.5) / sum(keep))
+    X <- model.matrix(~ ., data = cv[keep, , drop = FALSE])
+    resid <- function(v) as.numeric(v - X %*% qr.solve(X, v))
+    ry <- resid(y[keep])
+    rg <- if (length(cis)) t(apply(G[cis, keep, drop = FALSE], 1, resid)) else matrix(nrow = 0, ncol = sum(keep))
+    if (length(cis) == 1) rg <- matrix(rg, nrow = 1)
+    list(ry = ry, rg = rg, dof = sum(keep) - ncol(X) - 1)
+  })
+  ok <- if (length(cis)) Reduce(`&`, lapply(fits, function(f) apply(f$rg, 1, function(v) sd(v) > 1e-8))) else logical(0)
+  cis_ok <- cis[ok]
+  assoc <- function(f, yv) {
+    rg <- f$rg[ok, , drop = FALSE]
+    r <- as.numeric(cor(t(rg), yv))
+    t_stat <- r * sqrt(f$dof / pmax(1 - r^2, 1e-12))
+    slope <- as.numeric(rg %*% yv) / rowSums(rg^2)
+    list(r = r, t = t_stat, p = 2 * pt(-abs(t_stat), f$dof), slope = slope, se = abs(slope / t_stat))
+  }
+  if (!length(cis_ok)) {
+    if (!is.null(opt$permute)) lines <- c(lines, paste(head_of(ph, "NA"), paste(rep("NA", 15), collapse = " ")))
     next
   }
-  a <- assoc(ry)
-  slope <- as.numeric(rg %*% ry) / rowSums(rg^2)
-  se <- abs(slope / a$t)
-  snp_cols <- sprintf("%d %s %s %d %d", vcf$POS[cis] - ph$start, vcf$ID[cis], vcf$CHROM[cis], vcf$POS[cis], vcf$POS[cis])
-
+  res <- lapply(fits, function(f) assoc(f, f$ry))
+  best_p <- vapply(res, function(a) min(a$p), 0)
+  kb <- which.min(best_p)
+  snp_cols <- sprintf("%d %s %s %d %d", vcf$POS[cis_ok] - members$start[kb], vcf$ID[cis_ok], vcf$CHROM[cis_ok],
+                      vcf$POS[cis_ok], vcf$POS[cis_ok])
   if (!is.null(opt$nominal)) {
-    best <- which.min(a$p)
-    sel <- which(a$p <= opt$nominal)
-    lines <- c(lines, sprintf("%s %s %g %g %g %g %d", base, snp_cols[sel], a$p[sel], a$r[sel]^2,
-                              slope[sel], se[sel], as.integer(sel == best)))
+    for (k in seq_along(fits)) {
+      a <- res[[k]]
+      sel <- which(a$p <= opt$nominal)
+      best_snp <- which.min(res[[kb]]$p)
+      snp_k <- sprintf("%d %s %s %d %d", vcf$POS[cis_ok] - members$start[k], vcf$ID[cis_ok], vcf$CHROM[cis_ok],
+                       vcf$POS[cis_ok], vcf$POS[cis_ok])
+      hd <- head_of(members[k], members$pid[k])
+      lines <- c(lines, sprintf("%s %s %g %g %g %g %d", hd, snp_k[sel], a$p[sel], a$r[sel]^2, a$slope[sel],
+                                a$se[sel], as.integer(k == kb & sel == best_snp)))
+    }
   } else {
-    best <- which.min(a$p)
-    perm_min <- replicate(opt$permute, min(assoc(sample(ry))$p))
+    a <- res[[kb]]
+    bs <- which.min(a$p)
+    perm_min <- replicate(opt$permute, {
+      idx <- sample(length(fits[[1]]$ry))
+      min(vapply(fits, function(f) min(assoc(f, f$ry[idx])$p), 0))
+    })
     m <- mean(perm_min); v <- var(perm_min)
     common <- m * (1 - m) / v - 1
     shape1 <- m * common; shape2 <- (1 - m) * common
-    adj_emp <- (sum(perm_min <= a$p[best]) + 1) / (opt$permute + 1)
-    adj_beta <- pbeta(a$p[best], shape1, shape2)
-    lines <- c(lines, sprintf("%s %s %d %g %g %g %g %g %g %g %g %g", base, snp_cols[best], dof, dof,
-                              shape1, shape2, a$p[best], a$r[best]^2, slope[best], se[best], adj_emp, adj_beta))
+    adj_emp <- (sum(perm_min <= a$p[bs]) + 1) / (opt$permute + 1)
+    adj_beta <- pbeta(a$p[bs], shape1, shape2)
+    lines <- c(lines, sprintf("%s %s %d %g %g %g %g %g %g %g %g %g", head_of(members[kb], members$pid[kb]),
+                              snp_cols[bs], fits[[kb]]$dof, fits[[kb]]$dof, shape1, shape2, a$p[bs],
+                              a$r[bs]^2, a$slope[bs], a$se[bs], adj_emp, adj_beta))
   }
 }
 writeLines(lines, opt$out)

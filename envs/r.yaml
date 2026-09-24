@@ -12,5 +12,8 @@ dependencies:
   - r-coloc
   - r-mediation
   - r-testthat
+  - r-knitr
+  - r-rmarkdown
+  - pandoc
   - bioconductor-qvalue
   - bioconductor-limma

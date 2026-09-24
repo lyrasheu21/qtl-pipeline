@@ -1,23 +1,18 @@
-# Combine per-subclass CCI-expression correlations and plot their distribution.
-
-for (f in list.files(snakemake@params[["rdir"]], pattern = "\\.R$", full.names = TRUE)) source(f)
-start_logging(snakemake@log[[1]])
+# Combine phenotype-expression correlations across sets and plot them.
+source(file.path(snakemake@scriptdir, "load_qtlpost.R"))
 
 res <- rbindlist(lapply(unlist(snakemake@input), fread), fill = TRUE)
 write_tsv(res, snakemake@output[["table"]])
-
 res <- res[!is.na(r)]
 if (nrow(res) == 0) {
-  empty_plot(snakemake@output[["plot"]], "No CCI-expression correlations computed")
+  empty_plot(snakemake@output[["plot"]], "No phenotype-expression correlations computed")
 } else {
-  med <- res[, .(median_r = median(r)), by = side]
-  print(med)
+  print(res[, .(median_r = median(r), n = .N), by = set])
   p <- ggplot(res, aes(r)) +
     geom_histogram(binwidth = 0.05, fill = "steelblue", colour = "white") +
     geom_vline(xintercept = 0, linetype = "dashed", colour = "red") +
-    facet_wrap(~side, labeller = labeller(side = c(ligand = "Ligand expression (sending subclass)",
-                                                   receptor = "Receptor expression (receiving subclass)"))) +
-    labs(x = "Pearson r (CCI score vs gene expression, across donors)", y = "CCIs") +
+    facet_wrap(~set) +
+    labs(x = "Pearson r (phenotype vs its gene's expression, across donors)", y = "Phenotypes") +
     theme_pipeline()
-  save_plot(p, snakemake@output[["plot"]], width = 9, height = 4)
+  save_plot(p, snakemake@output[["plot"]], width = 3 + 3 * min(3, uniqueN(res$set)), height = 4)
 }

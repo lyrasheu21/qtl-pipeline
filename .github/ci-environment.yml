@@ -1,5 +1,5 @@
-# Environment for the GitHub Actions runner: Snakemake (which builds the
-# per-rule envs in envs/) plus R + data.table for the mock QTLtools.
+# Environment for the CI runner: Snakemake (which builds the per-rule envs in
+# envs/) plus a recent conda for it to use.
 name: ci
 channels: [conda-forge, bioconda, nodefaults]
 dependencies:
@@ -7,5 +7,3 @@ dependencies:
   - snakemake-minimal>=8,<9
   - pandas
   - conda>=24.7.1
-  - r-base>=4.4.3
-  - r-data.table

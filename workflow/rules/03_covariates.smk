@@ -1,23 +1,24 @@
-"""03 Covariates: QTLtools covariate files and donor-exclusion lists."""
+"""03 Covariates: one QTLtools covariate file per set and covariate set
+(main, sensitivity covariate sets, hidden-factor sweep)."""
 
 
 rule covariates:
     input:
-        donors=f"{RES}/samples/donors.txt",
-        metadata=INPUTS["metadata"],
-        ancestry_pcs=INPUTS["ancestry_pcs"] if INPUTS.get("ancestry_pcs") else [],
+        unpack(covariate_inputs),
     output:
-        f"{RES}/covariates/{{covset}}.txt",
+        cov=f"{RES}/covariates/{{set}}.{{covset}}.txt",
+        donors=f"{RES}/covariates/{{set}}.{{covset}}.donors.txt",
+        report=f"{RES}/covariates/{{set}}.{{covset}}.report.tsv",
     params:
-        rdir=R_DIR,
-        metadata_id=INPUTS["metadata_id_column"],
-        pcs_id=INPUTS.get("ancestry_pcs_id_column", ""),
-        definitions=config["covariates"]["definitions"],
-        use=lambda wc: COVARIATE_SETS[wc.covset],
-        n_pcs=config["covariates"]["n_ancestry_pcs"],
-        pc_prefix=config["covariates"].get("ancestry_pc_prefix", "PC"),
+        rdir=QTLPOST_R,
+        qtlpost_md5=QTLPOST_MD5,
+        covset=lambda wc: COVSETS[wc.covset],
+        definitions=COV["metadata"].get("definitions", {}),
+        metadata_id=INPUTS.get("metadata_id_column", "SubID"),
+        hidden=lambda wc: HIDDEN,
+        min_donors=COV.get("min_donors", 30),
     log:
-        f"{LOGS}/covariates.{{covset}}.log",
+        f"{LOGS}/covariates.{{set}}.{{covset}}.log",
     conda:
         "../../envs/r.yaml"
     script:
@@ -27,13 +28,13 @@ rule covariates:
 rule exclude_samples:
     """Random subset of donors to drop for a donor-fraction sensitivity variant."""
     input:
-        f"{RES}/samples/donors.txt",
+        f"{RES}/covariates/{{set}}.main.donors.txt",
     output:
-        f"{RES}/samples/exclude_{{variant}}.txt",
+        f"{RES}/samples/{{set}}.exclude_{{variant}}.txt",
     params:
         keep_fraction=lambda wc: VARIANTS[wc.variant]["donor_fraction"],
-        seed=config.get("sensitivity", {}).get("seed", 42),
+        seed=SENS.get("seed", 42),
     log:
-        f"{LOGS}/exclude_samples.{{variant}}.log",
+        f"{LOGS}/exclude_samples.{{set}}.{{variant}}.log",
     script:
         "../scripts/exclude_samples.py"

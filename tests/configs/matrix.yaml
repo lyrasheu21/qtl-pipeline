@@ -1,0 +1,56 @@
+# Toy test for the matrix adapter (eQTL-style): expression matrix with assay
+# sample IDs + sample map (one replicate pair), coordinates table, plink QC,
+# genotype PCs computed with plink2, and phenotype PCs as hidden factors.
+#   snakemake --profile profiles/local --configfile tests/configs/matrix.yaml [tests/configs/mock.yaml]
+
+results_dir: "results_test/matrix"
+
+modules:
+  coloc: true
+  magma: false
+  pi1: true
+  mediation: false
+  expression_cor: false
+  sensitivity: false
+
+inputs:
+  gene_annotation: "tests/data/gene_annotation.tsv"
+  gwas_table: "tests/data/gwas.tsv"
+
+chromosomes: [1, 2]
+
+genotypes:
+  vcf: "tests/data/genotypes.vcf.gz"
+  qc:
+    enabled: true
+  pcs:
+    source: "compute"
+    n_compute: 3
+
+phenotypes:
+  expr:
+    adapter: matrix
+    matrix: "tests/data/matrix/expression.tsv.gz"
+    id_column: "feature_id"
+    coordinates: "tests/data/matrix/coordinates.tsv"
+    group: "BulkBrain"
+    sample_map: {file: "tests/data/matrix/sample_map.tsv", from: "rna_sample", to: "donor"}
+    fdr_group_by: none
+
+covariates:
+  genotype_pcs: 3
+  hidden_factors:
+    source: "phenotype_pca"
+    k: 2
+  min_donors: 30
+
+qtl:
+  n_chunks: 2
+  n_permutations: 100
+  seed: 42
+
+qtl_qc:
+  nominal_sample_fraction: 0.5
+
+pi1:
+  eqtl_pattern: "tests/data/eqtl/eqtl_{group}_chr{chr}.tsv.gz"

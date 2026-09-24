@@ -1,0 +1,44 @@
+# eQTL (or caQTL / pQTL) from a feature x sample matrix (matrix adapter):
+# genotype QC and PCs computed in the pipeline, phenotype PCs as hidden
+# factors. Replace the /path/to/ placeholders.
+#
+#   snakemake --profile profiles/slurm --configfile config/examples/eqtl_matrix.yaml
+
+results_dir: "results/eqtl"
+
+modules:
+  coloc: true            # needs at least one GWAS row in config/gwas.tsv
+  sensitivity: true
+
+inputs:
+  gene_annotation: "/path/to/gene_annotation.tsv"
+  gwas_table: "config/gwas.tsv"
+
+genotypes:
+  vcf: "/path/to/genotypes.vcf.gz"
+  qc:
+    enabled: true
+  pcs:
+    source: "compute"
+    n_compute: 10
+
+phenotypes:
+  expr:
+    adapter: matrix
+    matrix: "/path/to/normalised_expression.tsv.gz"   # feature_id + one column per sample
+    id_column: "feature_id"
+    coordinates: "/path/to/gene_coordinates.tsv"      # feature_id chrom start end strand gene [group]
+    group: "tissue"
+    sample_map: {file: "/path/to/rna_to_donor.tsv", from: "rna_sample", to: "donor"}
+    min_nonzero_fraction: 0.2
+    fdr_group_by: none
+
+covariates:
+  genotype_pcs: 5
+  hidden_factors:
+    source: "phenotype_pca"
+    k: 15
+
+sensitivity:
+  n_permutations: 1000
+  sweep_k: [0, 5, 10, 15, 20, 30]

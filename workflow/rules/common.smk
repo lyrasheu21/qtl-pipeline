@@ -1,34 +1,42 @@
-"""Shared constants, config lookups and target lists."""
+"""Shared constants, config lookups, input functions and target lists."""
 
+import hashlib
 from pathlib import Path
 
 import pandas as pd
 
-R_DIR = str(Path(workflow.basedir).parent / "R")
+REPO = Path(workflow.basedir).parent
+QTLPOST_R = str(REPO / "qtlpost" / "R")
 SCRIPTS = str(Path(workflow.basedir) / "scripts")
 RES = config.get("results_dir", "results")
-LOGS = "logs"
-
-DIRECTIONS = ["sending", "receiving"]
+LOGS = f"{RES}/logs"
+INPUTS = config.get("inputs", {})
 CHUNKS = list(range(1, int(config["qtl"]["n_chunks"]) + 1))
-INPUTS = config["inputs"]
 
-CELL_TYPES = pd.read_csv(INPUTS["cell_types"], sep="\t", comment="#")
-SUBCLASSES = CELL_TYPES["subclass"].tolist()
+
+def _md5_of_dir(path):
+    h = hashlib.md5()
+    for f in sorted(Path(path).glob("*.R")):
+        h.update(f.read_bytes())
+    return h.hexdigest()
+
+
+# Passed as a param to every R rule: editing qtlpost/R changes it, so
+# Snakemake re-runs the affected rules.
+QTLPOST_MD5 = _md5_of_dir(QTLPOST_R)
 
 
 wildcard_constraints:
-    direction="sending|receiving",
+    set=r"[A-Za-z0-9_]+",
     chunk=r"\d+",
-    completeness=r"[0-9.]+",
+    fraction=r"[0-9.]+",
     variant=r"[A-Za-z0-9_.]+",
     covset=r"[A-Za-z0-9_.]+",
     gwas=r"[A-Za-z0-9_]+",
-    subclass=r"[A-Za-z0-9_]+",
 
 
 def module(name):
-    return bool(config["modules"].get(name, False))
+    return bool(config.get("modules", {}).get(name, False))
 
 
 def fmt_num(x):
@@ -37,56 +45,117 @@ def fmt_num(x):
 
 
 # ---------------------------------------------------------------------------
-# QTL model variants. "main" is the primary analysis; sensitivity analyses
-# add one variant per completeness threshold, donor fraction or covariate set.
-# Each variant maps to a phenotype BED (completeness), a covariate file and an
-# optional list of donors to exclude.
+# Phenotype sets. Each phenotypes entry produces one set (bed, matrix) or two
+# (cci: <name>_sending, <name>_receiving).
+# ---------------------------------------------------------------------------
+ADAPTERS = ("bed", "matrix", "cci")
+
+
+def build_sets():
+    sets = {}
+    for name, spec in (config.get("phenotypes") or {}).items():
+        adapter = spec.get("adapter")
+        if adapter not in ADAPTERS:
+            raise ValueError(f"phenotypes.{name}: adapter must be one of {ADAPTERS}, got {adapter!r}")
+        if adapter == "cci":
+            for direction in ("sending", "receiving"):
+                sets[f"{name}_{direction}"] = dict(entry=name, adapter=adapter, direction=direction, spec=spec)
+        else:
+            sets[name] = dict(entry=name, adapter=adapter, direction=None, spec=spec)
+    if not sets:
+        raise ValueError("No phenotypes configured: add at least one entry under `phenotypes:`")
+    return sets
+
+
+SETS = build_sets()
+
+
+def set_spec(s):
+    return SETS[s]["spec"]
+
+
+def set_fraction(s):
+    return fmt_num(set_spec(s).get("min_nonzero_fraction", 0))
+
+
+def set_window(s):
+    return int(set_spec(s).get("window", config["qtl"]["window"]))
+
+
+def set_grouped(s):
+    return bool(set_spec(s).get("grouped_permutation", False))
+
+
+def grp_flag(wildcards):
+    return "--grp-best" if set_grouped(wildcards.set) else ""
+
+
+def r_params(**extra):
+    """Params shared by every R rule: where qtlpost lives and its checksum."""
+    return dict(rdir=QTLPOST_R, qtlpost_md5=QTLPOST_MD5, **extra)
+
+
+def set_fdr_group(s):
+    default = "group" if SETS[s]["adapter"] == "cci" else "none"
+    return set_spec(s).get("fdr_group_by", default)
+
+
+# ---------------------------------------------------------------------------
+# Covariate sets: metadata covariates + genotype PCs + hidden factors (k).
+# ---------------------------------------------------------------------------
+COV = config["covariates"]
+HIDDEN = COV.get("hidden_factors", {}) or {}
+SENS = config.get("sensitivity", {}) or {}
+
+
+def build_covsets():
+    main = dict(use=list(COV["metadata"].get("use", [])), genotype_pcs=int(COV.get("genotype_pcs", 0)),
+                hidden_k=int(HIDDEN.get("k", 0)))
+    covsets = {"main": main}
+    if module("sensitivity"):
+        for name, use in (SENS.get("covariate_sets") or {}).items():
+            covsets[f"cov_{name}"] = dict(main, use=list(use))
+        for k in SENS.get("sweep_k") or []:
+            covsets[f"k{int(k)}"] = dict(main, hidden_k=int(k))
+    return covsets
+
+
+COVSETS = build_covsets()
+
+
+# ---------------------------------------------------------------------------
+# QTL model variants: "main" plus one per sensitivity entry.
+# fraction=None means "the set's own min_nonzero_fraction".
 # ---------------------------------------------------------------------------
 def build_variants():
-    main_c = fmt_num(config["phenotype"]["min_completeness"])
-    variants = {
-        "main": dict(
-            completeness=main_c,
-            covset="main",
-            donor_fraction=None,
-            n_perm=config["qtl"]["n_permutations"],
-        )
-    }
+    main_perm = config["qtl"]["n_permutations"]
+    variants = {"main": dict(fraction=None, covset="main", donor_fraction=None, n_perm=main_perm)}
     if module("sensitivity"):
-        s = config["sensitivity"]
-        for c in s.get("completeness", []):
-            variants[f"completeness{fmt_num(c)}"] = dict(
-                completeness=fmt_num(c), covset="main", donor_fraction=None, n_perm=s["n_permutations"]
-            )
-        for f in s.get("donor_fraction", []):
-            variants[f"donors{fmt_num(f)}"] = dict(
-                completeness=main_c, covset="main", donor_fraction=float(f), n_perm=s["n_permutations"]
-            )
-        for name in s.get("covariate_sets", {}):
-            variants[f"cov_{name}"] = dict(
-                completeness=main_c, covset=name, donor_fraction=None, n_perm=s["n_permutations"]
-            )
+        n = SENS.get("n_permutations", main_perm)
+        for f in SENS.get("min_nonzero_fraction") or []:
+            variants[f"nonzero{fmt_num(f)}"] = dict(fraction=fmt_num(f), covset="main", donor_fraction=None, n_perm=n)
+        for f in SENS.get("donor_fraction") or []:
+            variants[f"donors{fmt_num(f)}"] = dict(fraction=None, covset="main", donor_fraction=float(f), n_perm=n)
+        for name in COVSETS:
+            if name != "main":
+                variants[name] = dict(fraction=None, covset=name, donor_fraction=None, n_perm=n)
     return variants
 
 
 VARIANTS = build_variants()
 
-COVARIATE_SETS = {"main": config["covariates"]["use"]}
-if module("sensitivity"):
-    COVARIATE_SETS.update(config["sensitivity"].get("covariate_sets", {}))
 
-
-def variant(wildcards):
-    return VARIANTS[wildcards.variant]
-
+def variant_fraction(variant, s):
+    return VARIANTS[variant]["fraction"] or set_fraction(s)
 
 
 # ---------------------------------------------------------------------------
 # Input functions
 # ---------------------------------------------------------------------------
-GENO = INPUTS["genotype"]
+GENO = config["genotypes"]
 if bool(GENO.get("bfile")) == bool(GENO.get("vcf")):
-    raise ValueError("Set exactly one of inputs.genotype.bfile or inputs.genotype.vcf")
+    raise ValueError("Set exactly one of genotypes.bfile or genotypes.vcf")
+PCS_SOURCE = (GENO.get("pcs") or {}).get("source", "none")
 
 
 def genotype_inputs(wildcards):
@@ -95,29 +164,54 @@ def genotype_inputs(wildcards):
     return {"vcf": GENO["vcf"]}
 
 
-QTLTOOLS = config["qtl"].get("qtltools_binary", "QTLtools")
+def adapter_inputs(wildcards):
+    """Input files of the adapter behind a set (so Snakemake tracks them)."""
+    info = SETS[wildcards.set]
+    spec = info["spec"]
+    files = {"vcf_samples": f"{RES}/genotype/samples.txt"}
+    keys = {"bed": ["bed", "annotation"], "matrix": ["matrix", "coordinates"], "cci": ["matrix"]}[info["adapter"]]
+    for key in keys:
+        if spec.get(key):
+            files[key] = spec[key]
+    if info["adapter"] == "cci":
+        files["gene_annotation"] = INPUTS["gene_annotation"]
+    if (spec.get("sample_map") or {}).get("file"):
+        files["sample_map"] = spec["sample_map"]["file"]
+    return files
 
 
-def variant_bed(wildcards):
-    c = VARIANTS[wildcards.variant]["completeness"]
-    return {
-        "bed": f"{RES}/phenotype/{wildcards.direction}.c{c}.bed.gz",
-        "tbi": f"{RES}/phenotype/{wildcards.direction}.c{c}.bed.gz.tbi",
-    }
+def set_bed(wildcards, variant="main"):
+    variant = getattr(wildcards, "variant", variant)
+    f = variant_fraction(variant, wildcards.set)
+    return {"bed": f"{RES}/phenotypes/{wildcards.set}.c{f}.bed.gz",
+            "tbi": f"{RES}/phenotypes/{wildcards.set}.c{f}.bed.gz.tbi"}
+
+
+def covariate_inputs(wildcards):
+    files = dict(set_bed(wildcards, "main"))
+    if COV["metadata"].get("use") or SENS.get("covariate_sets"):
+        files["metadata"] = INPUTS["metadata"]
+    if PCS_SOURCE != "none":
+        files["pcs"] = f"{RES}/genotype/pcs.tsv"
+    if HIDDEN.get("source") == "file":
+        files["factors"] = HIDDEN["file"]
+        if (HIDDEN.get("sample_map") or {}).get("file"):
+            files["factor_map"] = HIDDEN["sample_map"]["file"]
+    return files
 
 
 def variant_cov(wildcards):
-    return f"{RES}/covariates/{VARIANTS[wildcards.variant]['covset']}.txt"
+    return f"{RES}/covariates/{wildcards.set}.{VARIANTS[wildcards.variant]['covset']}.txt"
 
 
 def variant_exclude(wildcards):
     if VARIANTS[wildcards.variant]["donor_fraction"] is None:
         return []
-    return f"{RES}/samples/exclude_{wildcards.variant}.txt"
+    return f"{RES}/samples/{wildcards.set}.exclude_{wildcards.variant}.txt"
 
 
 # ---------------------------------------------------------------------------
-# GWAS table (coloc) and MAGMA gene results
+# Downstream inputs and checks
 # ---------------------------------------------------------------------------
 def read_gwas_table():
     path = INPUTS.get("gwas_table", "")
@@ -129,14 +223,17 @@ def read_gwas_table():
 
 GWAS = read_gwas_table()
 GWAS_NAMES = GWAS.index.tolist()
-MAGMA_GWAS = list(config.get("magma", {}).get("gene_results", {}).keys()) if module("magma") else []
+MAGMA_GWAS = list((config.get("magma", {}) or {}).get("gene_results", {}).keys()) if module("magma") else []
+PARTNER_SETS = [s for s, info in SETS.items() if info["adapter"] == "cci"]
 
 if module("coloc") and not GWAS_NAMES:
     raise ValueError(f"modules.coloc is on but no GWAS are listed in {INPUTS.get('gwas_table')}")
-if module("magma") and not MAGMA_GWAS:
-    raise ValueError("modules.magma is on but magma.gene_results is empty")
+if module("magma") and (not MAGMA_GWAS or not INPUTS.get("gene_annotation")):
+    raise ValueError("modules.magma needs magma.gene_results and inputs.gene_annotation")
 if module("mediation") and not module("coloc"):
     raise ValueError("modules.mediation needs modules.coloc")
+if module("mediation") and not PARTNER_SETS:
+    raise ValueError("modules.mediation needs a phenotype set with partner genes (the cci adapter)")
 for mod in ("mediation", "expression_cor"):
     if module(mod) and not INPUTS.get("expression_pattern"):
         raise ValueError(f"modules.{mod} needs inputs.expression_pattern")
@@ -157,34 +254,36 @@ def all_targets():
     t = [
         f"{RES}/genotype/qc.vcf.gz.tbi",
         f"{RES}/genotype/qc_summary.tsv",
-        f"{RES}/samples/sample_report.tsv",
-        f"{RES}/phenotype/phenotype_report.c{VARIANTS['main']['completeness']}.tsv",
-        f"{RES}/qtl_qc/fdr_counts.tsv",
+        f"{RES}/qtl_qc/fdr_summary.tsv",
         f"{RES}/qtl_qc/fdr_dotplot.pdf",
         f"{RES}/qtl_qc/permute_qq.pdf",
-        f"{RES}/qtl_qc/shared_snp_hits.tsv",
+        f"{RES}/qtl_qc/pvalue_histograms.pdf",
+        f"{RES}/qtl_qc/shared_lead_snps.tsv",
         f"{RES}/qtl_qc/nominal_lambda.tsv",
         f"{RES}/figures/upset_genes_by_class.pdf",
     ]
-    if module("sensitivity"):
-        t.append(f"{RES}/qtl_qc/sensitivity_fdr_counts.tsv")
-    if module("coloc"):
+    for s in SETS:
         t += [
-            f"{RES}/coloc/coloc_master.tsv",
-            f"{RES}/coloc/coloc_gold_unique.tsv",
-            f"{RES}/figures/coloc_summary.pdf",
+            f"{RES}/phenotypes/{s}.annotation.tsv",
+            f"{RES}/phenotypes/{s}.c{set_fraction(s)}.report.tsv",
+            f"{RES}/covariates/{s}.main.report.tsv",
+            f"{RES}/qtl/main/{s}.permute.tsv.gz",
+            f"{RES}/qtl/main/{s}.nominal.fdr.tsv.gz",
         ]
+    if module("sensitivity"):
+        t.append(f"{RES}/qtl_qc/sensitivity_summary.tsv")
+    if module("coloc"):
+        t += [f"{RES}/coloc/coloc_master.tsv", f"{RES}/coloc/coloc_gold_unique.tsv",
+              f"{RES}/figures/coloc_summary.pdf"]
     if module("magma"):
-        t += expand(
-            f"{RES}/magma/heatmap.{{threshold}}.{{level}}.pdf",
-            threshold=["fdr", "nominal"],
-            level=config["magma"]["levels"],
-        )
+        t += expand(f"{RES}/magma/heatmap.{{threshold}}.{{level}}.pdf",
+                    threshold=["fdr", "nominal"], level=config["magma"]["levels"])
     if module("pi1"):
         t += [f"{RES}/pi1/pi1.tsv", f"{RES}/pi1/beta_scatter.pdf"]
     if module("mediation"):
         t += [f"{RES}/mediation/mediation_results.tsv", f"{RES}/mediation/interaction_results.tsv"]
-        t += [f"{RES}/figures/chord_{target.replace(':', '_')}.pdf" for target in config["figures"]["chord_targets"]]
+        t += [f"{RES}/figures/chord_{x.replace(':', '_')}.pdf" for x in config["figures"]["chord_targets"]]
     if module("expression_cor"):
-        t += [f"{RES}/expression_cor/cci_expression_cor.tsv", f"{RES}/expression_cor/cci_expression_cor.pdf"]
+        t += [f"{RES}/expression_cor/phenotype_expression_cor.tsv",
+              f"{RES}/expression_cor/phenotype_expression_cor.pdf"]
     return t
