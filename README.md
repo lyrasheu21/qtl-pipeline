@@ -14,7 +14,19 @@ The same workflow handles different molecular phenotypes through *adapters*:
 | `matrix` | feature × sample table + coordinates | eQTL, caQTL, pQTL |
 | `cci` | donor × cell–cell-interaction score matrix | interaction QTLs, mapped at the ligand (*sending*) and at the receptor (*receiving*) |
 
-![Pipeline rule graph](docs/rulegraph.svg)
+```mermaid
+flowchart LR
+    G["Genotypes<br/>VCF / plink"] --> S1["01 Genotype QC<br/>+ genotype PCs"]
+    P["Phenotypes<br/>BED · matrix · CCI scores"] --> S2["02 Phenotype adapter<br/>BED + annotation"]
+    C["Covariates<br/>metadata · PEER factors"] --> S3["03 Covariate file"]
+    S1 --> S4["04 QTLtools cis<br/>permutation + nominal"]
+    S2 --> S4
+    S3 --> S4
+    S4 --> S5["05 QC + standard outputs<br/>q-values · QQ · K sweep"]
+    S5 --> S6["06 Downstream (optional)<br/>coloc · MAGMA · π1 · expression"]
+```
+
+<sub>Full Snakemake rule graph: [docs/rulegraph.svg](docs/rulegraph.svg)</sub>
 
 **Layer 1: pipeline (raw inputs → standard QTL outputs)**
 1. **Genotypes:** donor subset and plink QC (missingness, MAF, HWE, haplotype missingness), which can be turned off for pre-cleaned VCFs. Genotype PCs are read from a file or computed with plink2.
