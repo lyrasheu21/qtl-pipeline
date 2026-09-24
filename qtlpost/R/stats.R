@@ -82,14 +82,6 @@ qq_points <- function(p) {
   data.table(expected = -log10(ppoints(length(p))), observed = -log10(p))
 }
 
-#' Partial eta-squared of one term in a linear model (type I sums of squares).
-partial_eta_sq <- function(fit, term) {
-  a <- anova(fit)
-  if (!term %in% rownames(a)) return(NA_real_)
-  ss <- a[term, "Sum Sq"]
-  ss / (ss + a["Residuals", "Sum Sq"])
-}
-
 #' Rank-based inverse normal transform of each row (as QTLtools --normal).
 rank_normal_rows <- function(mat) {
   t(apply(mat, 1, function(x) {

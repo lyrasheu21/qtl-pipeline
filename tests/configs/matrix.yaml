@@ -9,7 +9,6 @@ modules:
   coloc: true
   magma: false
   pi1: true
-  mediation: false
   expression_cor: false
   sensitivity: false
 

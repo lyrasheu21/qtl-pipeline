@@ -139,36 +139,3 @@ plot_coloc_summary <- function(master, gt, gwas_levels, pp_h4) {
     labs(x = "GWAS", y = sprintf("Genes with colocalised QTL (PP.H4 >= %g)", pp_h4), fill = "Group") +
     theme_pipeline()
 }
-
-#' Chord diagram for one anchor ("group:gene") from mediation results: every
-#' tested partner links to the anchor; red links = ACME p < 0.05.
-plot_chord <- function(med, target, gt, path) {
-  med <- med[anchor == target]
-  if (nrow(med) == 0) return(empty_plot(path, paste("No mediation results for", target)))
-  med <- med[order(acme_p)][!duplicated(partner)]
-  med[, partner_group := sub(":.*$", "", partner)]
-  med[, partner_group := factor(partner_group, levels = group_order(gt, partner_group))]
-  setorder(med, partner_group)
-  cols <- group_colors(gt, c(as.character(med$partner_group), sub(":.*$", "", target)))
-  grid_col <- c(setNames(cols[as.character(med$partner_group)], med$partner),
-                setNames(cols[[sub(":.*$", "", target)]], target))
-  link_col <- ifelse(med$acme_p < 0.05, "#D7191CCC", "#99999966")
-  grDevices::pdf(path, width = 7, height = 7)
-  on.exit(grDevices::dev.off())
-  circlize::circos.clear()
-  circlize::circos.par(start.degree = 90)
-  circlize::chordDiagram(data.frame(from = med$partner, to = target, value = 1), grid.col = grid_col,
-                         col = link_col, directional = 1, direction.type = c("diffHeight", "arrows"),
-                         link.arr.type = "big.arrow", annotationTrack = "grid",
-                         preAllocateTracks = list(track.height = 0.3), order = c(med$partner, target))
-  circlize::circos.trackPlotRegion(track.index = 1, bg.border = NA, panel.fun = function(x, y) {
-    circlize::circos.text(mean(circlize::get.cell.meta.data("xlim")), circlize::get.cell.meta.data("ylim")[1] + 0.1,
-                          circlize::get.cell.meta.data("sector.index"), facing = "clockwise", niceFacing = TRUE,
-                          adj = c(0, 0.5), cex = 0.6)
-  })
-  graphics::title(target)
-  graphics::legend("bottomleft", legend = c("Mediation ACME p < 0.05", "Not significant"),
-                   fill = c("#D7191C", "#999999"), border = NA, bty = "n", cex = 0.8)
-  circlize::circos.clear()
-  invisible(path)
-}

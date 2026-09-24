@@ -8,7 +8,6 @@ modules:
   coloc: true
   magma: false          # needs the MAGMA binary and real gene-level GWAS results
   pi1: true
-  mediation: true
   expression_cor: true
   sensitivity: true
 
@@ -72,12 +71,7 @@ sensitivity:
 coloc:
   max_locus_plots: 5
 
-mediation:
-  qtl_p: 1.0e-4          # relaxed: 59 toy donors cannot reach 5e-8
-  sims: 200
 
 pi1:
   eqtl_pattern: "tests/data/eqtl/eqtl_{group}_chr{chr}.tsv.gz"
 
-figures:
-  chord_targets: ["Astro:LIGA", "OPC:RECB"]

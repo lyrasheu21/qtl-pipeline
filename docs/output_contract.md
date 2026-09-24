@@ -50,4 +50,4 @@ best_hit` (QTLtools `cis --nominal --std-err` output with names;
 | `qtl_qc/sensitivity_summary.tsv` | FDR counts for every sensitivity variant, including the hidden-factor sweep (`k`) |
 | `qtl_qc/*.pdf` | Dot plot, QQ plots, p-value histograms, nominal QQ, sensitivity / K-sweep plots |
 | `coloc/coloc_master.tsv` | Colocalised phenotypes (PP.H4 >= threshold) with tier, lead SNP and GWAS / QTL statistics |
-| `pi1/pi1.tsv`, `mediation/*.tsv`, `magma/*`, `expression_cor/*`, `figures/*` | Downstream module results |
+| `pi1/pi1.tsv`, `magma/*`, `expression_cor/*`, `figures/*` | Downstream module results |

@@ -31,14 +31,6 @@ test_that("Fisher's method matches a direct calculation", {
   expect_equal(fisher_combine(0.01, 0.02), pchisq(-2 * log(0.01 * 0.02), 4, lower.tail = FALSE))
 })
 
-test_that("partial eta-squared is between 0 and 1", {
-  set.seed(3)
-  d <- data.frame(x = rnorm(100), g = rbinom(100, 2, 0.4))
-  d$y <- d$x * d$g + rnorm(100)
-  e <- partial_eta_sq(lm(y ~ x * g, data = d), "x:g")
-  expect_true(e > 0 && e < 1)
-})
-
 test_that("the base-R Storey fallback agrees with qvalue where qvalue works", {
   skip_if_not_installed("qvalue")
   set.seed(4)

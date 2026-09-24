@@ -20,7 +20,6 @@ properties:
       coloc: {type: boolean}
       magma: {type: boolean}
       pi1: {type: boolean}
-      mediation: {type: boolean}
       expression_cor: {type: boolean}
       sensitivity: {type: boolean}
 
@@ -161,15 +160,5 @@ properties:
       levels: {type: array, items: {enum: [group, class, superclass]}}
       nominal_p: {$ref: "#/definitions/probability"}
       gene_results: {type: object, additionalProperties: {type: string}}
-
-  mediation:
-    type: object
-    properties:
-      snp_pp_h4: {$ref: "#/definitions/probability"}
-      pp_h4: {$ref: "#/definitions/probability"}
-      gwas_p: {$ref: "#/definitions/probability"}
-      qtl_p: {$ref: "#/definitions/probability"}
-      sims: {type: integer, minimum: 1}
-      seed: {type: integer}
 
 required: [modules, genotypes, phenotypes, covariates, qtl, qtl_qc]

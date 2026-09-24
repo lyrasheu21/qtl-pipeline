@@ -11,7 +11,6 @@ modules:
   coloc: true
   magma: false
   pi1: true
-  mediation: false          # needs partner genes (cci adapter)
   expression_cor: true
   sensitivity: true
 

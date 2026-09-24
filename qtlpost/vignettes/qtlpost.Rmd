@@ -90,7 +90,6 @@ plot_ksweep(sweep[, .(set, k, n_fdr_01, n_fdr_05, n_fdr_10)])
 ## Other functions
 
 - `pi1_replication()`: replication of QTL hits in an eQTL resource
-- `run_mediation()`: genotype → anchor expression → partner expression
 - `phenotype_expression_cor()`: phenotype vs expression of its gene
 - `magma_gene_sets()`, `read_magma_gsa()`, `plot_magma_heatmap()`: MAGMA gene-set analysis
-- `plot_upset_classes()`, `plot_coloc_summary()`, `plot_chord()`: summary figures
+- `plot_upset_classes()`, `plot_coloc_summary()`: summary figures

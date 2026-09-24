@@ -32,7 +32,6 @@ The same workflow handles different molecular phenotypes through *adapters*:
 - colocalisation with GWAS (coloc), with Gold/Silver/Bronze tiers and locus plots
 - MAGMA gene-set enrichment
 - π1 replication in an eQTL resource
-- mediation through gene expression
 - phenotype–expression correlation
 - summary figures
 
@@ -99,6 +98,15 @@ Frequently tuned settings:
      and run with `--sdm conda apptainer`
 - **MAGMA** (only for the MAGMA module): set `magma.binary`.
 
+## Analyses (not part of the pipeline)
+
+Exploratory follow-ups that build on the pipeline's outputs but involve modelling choices that
+are not settled live as notebooks in [`analyses/`](analyses/):
+
+- [`analyses/mediation/cci_mediation.Rmd`](analyses/mediation/cci_mediation.Rmd): does a
+  colocalised cciQTL act through expression of its anchor gene on its interaction partner?
+  (`mediation::mediate`, plus an interaction model and chord diagrams, with the caveats spelled out.)
+
 ## `qtlpost` R package
 
 ```r
@@ -118,6 +126,7 @@ colocalisation, locus plots and the hidden-factor sweep on the bundled toy resul
 config/            config.yaml (documented template), examples/, gwas.tsv, cell_types.tsv, schema/
 workflow/          Snakefile, rules/ (01 genotypes ... 06 downstream), scripts/ (thin wrappers)
 qtlpost/           R package: R/, tests/testthat/, vignettes/, inst/extdata/ (toy results)
+analyses/          exploratory notebooks on pipeline outputs (not run by the pipeline)
 envs/              conda environments
 profiles/          local, LSF and SLURM execution profiles
 tools/qtltools/    QTLtools build script and Dockerfile

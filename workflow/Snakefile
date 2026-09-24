@@ -2,7 +2,7 @@
 #
 #   01 genotypes -> 02 phenotypes (adapters: bed | matrix | cci) -> 03 covariates
 #   -> 04 QTLtools cis (permutation + nominal) -> 05 QC + standard outputs
-#   -> 06 downstream (coloc, MAGMA, pi1, mediation, expression correlation, figures)
+#   -> 06 downstream (coloc, MAGMA, pi1, expression correlation, figures)
 #
 # Run from the repository root, e.g.
 #   snakemake --profile profiles/local --configfile config/examples/cage.yaml

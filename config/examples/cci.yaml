@@ -10,7 +10,6 @@ modules:
   coloc: true            # needs at least one GWAS row in config/gwas.tsv
   magma: true
   pi1: true
-  mediation: true
   expression_cor: true
   sensitivity: false
 
@@ -72,5 +71,3 @@ magma:
 pi1:
   eqtl_pattern: "/path/to/eqtl/eQTL_result_{group}_chr{chr}.gz"
 
-figures:
-  chord_targets: []

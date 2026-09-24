@@ -227,19 +227,13 @@ def read_gwas_table():
 GWAS = read_gwas_table()
 GWAS_NAMES = GWAS.index.tolist()
 MAGMA_GWAS = list((config.get("magma", {}) or {}).get("gene_results", {}).keys()) if module("magma") else []
-PARTNER_SETS = [s for s, info in SETS.items() if info["adapter"] == "cci"]
 
 if module("coloc") and not GWAS_NAMES:
     raise ValueError(f"modules.coloc is on but no GWAS are listed in {INPUTS.get('gwas_table')}")
 if module("magma") and (not MAGMA_GWAS or not INPUTS.get("gene_annotation")):
     raise ValueError("modules.magma needs magma.gene_results and inputs.gene_annotation")
-if module("mediation") and not module("coloc"):
-    raise ValueError("modules.mediation needs modules.coloc")
-if module("mediation") and not PARTNER_SETS:
-    raise ValueError("modules.mediation needs a phenotype set with partner genes (the cci adapter)")
-for mod in ("mediation", "expression_cor"):
-    if module(mod) and not INPUTS.get("expression_pattern"):
-        raise ValueError(f"modules.{mod} needs inputs.expression_pattern")
+if module("expression_cor") and not INPUTS.get("expression_pattern"):
+    raise ValueError("modules.expression_cor needs inputs.expression_pattern")
 if module("pi1") and not config["pi1"].get("eqtl_pattern"):
     raise ValueError("modules.pi1 needs pi1.eqtl_pattern")
 
@@ -283,9 +277,6 @@ def all_targets():
                     threshold=["fdr", "nominal"], level=config["magma"]["levels"])
     if module("pi1"):
         t += [f"{RES}/pi1/pi1.tsv", f"{RES}/pi1/beta_scatter.pdf"]
-    if module("mediation"):
-        t += [f"{RES}/mediation/mediation_results.tsv", f"{RES}/mediation/interaction_results.tsv"]
-        t += [f"{RES}/figures/chord_{x.replace(':', '_')}.pdf" for x in config["figures"]["chord_targets"]]
     if module("expression_cor"):
         t += [f"{RES}/expression_cor/phenotype_expression_cor.tsv",
               f"{RES}/expression_cor/phenotype_expression_cor.pdf"]

@@ -8,7 +8,7 @@ Description: Functions for working with the standard outputs of the qtl-pipeline
     Snakemake workflow (or any QTLtools cis results): reading and annotating
     permutation/nominal output, per-group q-values, covariate assembly,
     colocalisation with GWAS (coloc), MAGMA gene sets, pi1 replication in eQTL
-    resources, mediation analysis, and summary / locus plots.
+    resources, phenotype-expression correlation, and summary / locus plots.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends: R (>= 4.1)
@@ -19,9 +19,7 @@ Imports:
     limma,
     coloc,
     patchwork,
-    mediation,
-    UpSetR,
-    circlize
+    UpSetR
 Suggests:
     testthat (>= 3.0.0),
     knitr,

@@ -15,7 +15,6 @@ modules:
   coloc: false           # needs gwas_table
   magma: false           # needs magma.gene_results + gene_annotation
   pi1: false             # needs pi1.eqtl_pattern
-  mediation: false       # needs coloc + expression_pattern + partner columns (CCI)
   expression_cor: false  # needs expression_pattern
   sensitivity: false     # extra permutation runs, see `sensitivity:`
 
@@ -145,16 +144,5 @@ pi1:
   z_column: z
   p_column: ""
 
-mediation:
-  snp_pp_h4: 0.5
-  pp_h4: 0.8
-  gwas_p: 5.0e-8
-  qtl_p: 5.0e-8
-  sims: 1000
-  seed: 42
-
 expression_cor:
   min_donors: 4
-
-figures:
-  chord_targets: []              # "group:gene" anchors for mediation chord diagrams

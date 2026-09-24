@@ -1,0 +1,203 @@
+---
+title: "Mediation analysis of colocalised cciQTLs (exploratory)"
+output:
+  html_document:
+    toc: true
+params:
+  results_dir: "results_test/cci"                              # pipeline results_dir of a CCI run
+  expression_pattern: "tests/data/expression/{group}.tsv.gz"   # residualised expression per group
+  snp_pp_h4: 0.5      # lead SNP's SNP.PP.H4 must exceed this
+  pp_h4: 0.8          # locus-level PP.H4 must exceed this
+  gwas_p: 5.0e-8      # GWAS p-value of the lead SNP
+  qtl_p: 1.0e-4       # cciQTL p-value of the lead SNP (5e-8 for real data; relaxed for the toy set)
+  sims: 1000          # mediation::mediate simulations
+  seed: 42
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, fig.width = 7, fig.height = 6)
+knitr::opts_knit$set(root.dir = rprojroot::find_root(rprojroot::has_file("workflow/Snakefile")))
+```
+
+This notebook is **not part of the pipeline**. It is an exploratory follow-up
+on colocalised cell–cell interaction QTLs (cciQTLs) from a pipeline run with
+the `cci` adapter and the `coloc` module. It documents one way to ask whether
+a cciQTL acts through expression of the gene it is mapped at, and it is kept
+separate on purpose: the model below involves choices that are not settled.
+
+Run it from the repository root on the toy CCI results
+(`snakemake --configfile tests/configs/cci.yaml ...`), or point `params` at a
+real run:
+
+```r
+rmarkdown::render("analyses/mediation/cci_mediation.Rmd",
+                  params = list(results_dir = "/path/to/results/cci", qtl_p = 5e-8))
+```
+
+Requirements: R packages `data.table`, `ggplot2`, `mediation`, `circlize`,
+`rprojroot`, `rmarkdown`, and `bcftools` on the `PATH`.
+
+## The question and the model
+
+A cciQTL is a variant associated with how strongly one cell type (sending,
+ligand) signals to another (receiving, receptor). For a cciQTL mapped at its
+**anchor** gene (the ligand for sending, the receptor for receiving), with an
+interaction **partner** on the other side, the model tested here is
+
+> genotype → anchor gene expression (in the anchor's cell type) →
+> partner gene expression (in the partner's cell type)
+
+fitted with `mediation::mediate()`:
+
+- mediator model: `anchor ~ genotype`
+- outcome model: `partner ~ anchor + genotype`
+- ACME = the average causal mediation effect of the genotype on the partner
+  through the anchor.
+
+Alongside it, an interaction model `partner ~ anchor * genotype` asks a
+*different* question: does the genotype change how tightly the partner tracks
+the anchor? Its `anchor:genotype` term and partial η² are reported separately.
+
+**Caveats to keep in mind before interpreting anything:**
+
+- The direction (anchor → partner) is an assumption. The reverse model, or
+  no causal link between the two genes' expression across donors, fits the
+  same data equally well unless there is outside evidence.
+- Expression is residualised per cell type; the correlation between two cell
+  types' expression across donors can be driven by shared donor-level factors
+  that residualisation did not remove.
+- Mediation assumes no unmeasured mediator–outcome confounding, which is hard
+  to justify for bulk donor-level expression.
+- Many hits × many partners are tested; the p-values below are not corrected.
+- The hit filters in `params` are judgement calls.
+
+## 1. Colocalised hits to test
+
+```{r packages}
+library(data.table)
+library(ggplot2)
+set.seed(params$seed)
+res <- params$results_dir
+```
+
+```{r hits}
+gold <- fread(file.path(res, "coloc", "coloc_gold_unique.tsv"), sep = "\t")
+hits <- gold[!is.na(partner_gene) & !is.na(partner_group) &
+             lead_snp_pp_h4 > params$snp_pp_h4 & PP.H4 > params$pp_h4 &
+             gwas_p < params$gwas_p & qtl_p < params$qtl_p]
+hits <- hits[, .(gwas, set, phenotype_id, snp = lead_snp, group, gene, partner_group, partner_gene, PP.H4, qtl_p)]
+cat(sprintf("%d of %d Gold_Unique colocalisations pass the filters\n", nrow(hits), nrow(gold)))
+hits
+```
+
+Each distinct (anchor, SNP, partner) combination is one test, whichever GWAS
+it colocalised with:
+
+```{r tests}
+tests <- hits[, .(gwas = paste(sort(unique(gwas)), collapse = ";")),
+              by = .(group, gene, snp, partner_group, partner_gene)]
+nrow(tests)
+```
+
+## 2. Genotypes of the lead SNPs
+
+Genotypes come from the pipeline's QC'd VCF.
+
+```{r genotypes}
+vcf <- file.path(res, "genotype", "qc.vcf.gz")
+snp_file <- tempfile()
+writeLines(unique(tests$snp), snp_file)
+samples <- system2("bcftools", c("query", "-l", vcf), stdout = TRUE)
+body <- system(sprintf("bcftools view -i 'ID=@%s' %s | bcftools query -f '%%ID[\\t%%GT]\\n'",
+                       snp_file, shQuote(vcf)), intern = TRUE)
+geno <- fread(text = paste(body, collapse = "\n"), header = FALSE, colClasses = "character")
+setnames(geno, c("snp", samples))
+
+gt_to_dosage <- function(gt) {
+  gt <- gsub("|", "/", gt, fixed = TRUE)
+  c("0/0" = 0, "0/1" = 1, "1/0" = 1, "1/1" = 2)[gt]
+}
+dosage <- as.matrix(geno[, lapply(.SD, gt_to_dosage), .SDcols = samples])
+rownames(dosage) <- geno$snp
+dim(dosage)
+```
+
+## 3. Expression
+
+```{r expression}
+read_expression <- function(g) {
+  path <- gsub("{group}", g, params$expression_pattern, fixed = TRUE)
+  if (!file.exists(path)) return(NULL)
+  dt <- fread(path)
+  m <- as.matrix(dt[, -1]); rownames(m) <- dt[[1]]
+  m
+}
+groups <- unique(c(tests$group, tests$partner_group))
+expr <- setNames(lapply(groups, read_expression), groups)
+vapply(expr, function(m) if (is.null(m)) "missing" else paste(dim(m), collapse = " x "), "")
+```
+
+## 4. Mediation and interaction models
+
+```{r models}
+partial_eta_sq <- function(fit, term) {
+  a <- anova(fit)
+  a[term, "Sum Sq"] / (a[term, "Sum Sq"] + a["Residuals", "Sum Sq"])
+}
+
+fit_one <- function(t) {
+  a <- expr[[t$group]]; p <- expr[[t$partner_group]]
+  if (is.null(a) || is.null(p) || !t$gene %in% rownames(a) || !t$partner_gene %in% rownames(p) ||
+      !t$snp %in% rownames(dosage)) return(NULL)
+  donors <- Reduce(intersect, list(colnames(dosage), colnames(a), colnames(p)))
+  df <- data.frame(geno = dosage[t$snp, donors], anchor = a[t$gene, donors], partner = p[t$partner_gene, donors])
+  df <- df[complete.cases(df), ]
+  if (nrow(df) < 10 || length(unique(df$geno)) < 2) return(NULL)
+
+  med <- mediation::mediate(lm(anchor ~ geno, df), lm(partner ~ anchor + geno, df),
+                            treat = "geno", mediator = "anchor", robustSE = TRUE, sims = params$sims)
+  int_fit <- lm(partner ~ anchor * geno, df)
+  co <- summary(int_fit)$coefficients
+  data.table(anchor = paste0(t$group, ":", t$gene), snp = t$snp,
+             partner = paste0(t$partner_group, ":", t$partner_gene), gwas = t$gwas, n = nrow(df),
+             acme = med$d0, acme_p = med$d0.p, ade = med$z0, ade_p = med$z0.p,
+             prop_mediated = med$n0, total = med$tau.coef, total_p = med$tau.p,
+             interaction_beta = co["anchor:geno", "Estimate"], interaction_p = co["anchor:geno", "Pr(>|t|)"],
+             partial_eta_sq = partial_eta_sq(int_fit, "anchor:geno"))
+}
+
+results <- rbindlist(lapply(seq_len(nrow(tests)), function(i) fit_one(tests[i])))
+results[order(acme_p)]
+```
+
+```{r save}
+out_dir <- file.path(res, "analyses", "mediation")
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+fwrite(results, file.path(out_dir, "mediation_results.tsv"), sep = "\t")
+```
+
+## 5. One anchor at a time
+
+For each anchor gene, every tested partner as a chord (red: ACME p < 0.05).
+
+```{r chords, fig.height = 6}
+chord <- function(target) {
+  med <- results[anchor == target][order(acme_p)][!duplicated(partner)]
+  cols <- setNames(grDevices::hcl.colors(nrow(med) + 1, "Dark 3"), c(med$partner, target))
+  circlize::circos.clear()
+  circlize::circos.par(start.degree = 90)
+  circlize::chordDiagram(data.frame(from = med$partner, to = target, value = 1), grid.col = cols,
+                         col = ifelse(med$acme_p < 0.05, "#D7191CCC", "#99999966"), directional = 1,
+                         direction.type = c("diffHeight", "arrows"), link.arr.type = "big.arrow",
+                         annotationTrack = c("name", "grid"))
+  graphics::title(target)
+  circlize::circos.clear()
+}
+for (target in unique(results$anchor)) chord(target)
+```
+
+## Session info
+
+```{r session}
+sessionInfo()
+```

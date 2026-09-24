@@ -8,9 +8,7 @@ dependencies:
   - r-ggplot2
   - r-patchwork
   - r-upsetr
-  - r-circlize
   - r-coloc
-  - r-mediation
   - r-testthat
   - r-knitr
   - r-rmarkdown
