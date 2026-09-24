@@ -9,7 +9,9 @@ qt <- read_qtltools(snakemake@input[["permute"]], "permute")
 annotation <- read_tsv(snakemake@input[["annotation"]])
 message(sprintf("%s: %d phenotypes tested, %d with a cis variant", set_name, nrow(qt), sum(!is.na(qt$adj_beta_pval))))
 
-out <- annotate_permute(qt, annotation, gt, set_name, snakemake@params[["fdr_group_by"]], snakemake@params[["fdr"]])
+out <- annotate_permute(qt, annotation, gt, set_name, snakemake@params[["fdr_group_by"]], snakemake@params[["fdr"]],
+                        fdr_method = snakemake@params[["fdr_method"]])
+message(sprintf("%s: FDR method %s, strata: %s", set_name, snakemake@params[["fdr_method"]], snakemake@params[["fdr_group_by"]]))
 if (nrow(out)) {
   summ <- fdr_summary(out, by = "set")
   message(sprintf("%s: %d QTLs at q <= %g (pi0 = %.3f; %s)", set_name, summ$n_fdr, snakemake@params[["fdr"]],

@@ -80,6 +80,7 @@ Frequently tuned settings:
 |---|---|
 | `genotypes.qc.enabled`, `genotypes.qc.hwe` | Genotype QC on/off, HWE threshold (default 1e-6) |
 | `phenotypes.<name>.fdr_group_by` | `group` (e.g. per cell subclass) or `none` (one global q-value) |
+| `phenotypes.<name>.fdr_method` | `storey` (q-values, default) or `bh` (Benjamini–Hochberg, more conservative) |
 | `phenotypes.<name>.min_nonzero_fraction` | Drop phenotypes that are zero or missing in too many donors |
 | `phenotypes.<name>.grouped_permutation` | QTLtools `--grp-best`, grouping phenotypes by the BED `gid` column |
 | `covariates.hidden_factors` | `file` (e.g. PEER factors, `.RData` or TSV, optional sample map) or `phenotype_pca`, with `k` factors |

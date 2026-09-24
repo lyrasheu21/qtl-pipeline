@@ -79,6 +79,7 @@ properties:
         min_nonzero_fraction: {$ref: "#/definitions/probability"}
         zero_as_missing: {type: boolean}
         fdr_group_by: {enum: [group, class, superclass, none]}
+        fdr_method: {enum: [storey, bh]}
         grouped_permutation: {type: boolean}
         window: {type: integer, minimum: 1}
         sample_map: {$ref: "#/definitions/sample_map"}

@@ -60,6 +60,7 @@ genotypes:
 #   cci    - donor x CCI score matrix                               -> sets "<name>_sending", "<name>_receiving"
 # Options shared by all adapters:
 #   fdr_group_by: group | class | superclass | none   (none = one global q-value)
+#   fdr_method: storey | bh       storey = q-values (default); bh = Benjamini-Hochberg (pi0 = 1, more conservative)
 #   min_nonzero_fraction: 0.0     keep phenotypes non-zero in at least this fraction of donors
 #   sample_map: {file, from, to}  phenotype sample ID -> donor ID (replicates averaged)
 #   window: 1000000               cis window (overrides qtl.window)

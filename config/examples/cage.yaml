@@ -32,6 +32,7 @@ phenotypes:
     bed: "/path/to/phenotypes.bed.gz"
     group: "DLPFC"                                   # label used in plots / q-value strata
     fdr_group_by: none                               # one global q-value
+    fdr_method: storey                               # or bh (Benjamini-Hochberg)
     # grouped_permutation: true                      # test peaks of the same gene (BED gid) together
 
 covariates:

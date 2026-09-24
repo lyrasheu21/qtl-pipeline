@@ -22,12 +22,19 @@ storey_qvalue <- function(p, lambda = seq(0.05, 0.95, 0.05)) {
 #' implementation for groups of at least `min_storey` p-values and
 #' Benjamini-Hochberg (pi0 = 1) for smaller ones, where pi0 cannot be
 #' estimated reliably. Pass a constant `group` for one global q-value.
-qvalue_by_group <- function(p, group, min_storey = 20) {
+#' @param method "storey" (q-values, default) or "bh" (Benjamini-Hochberg
+#'   adjusted p-values, i.e. pi0 = 1; more conservative).
+qvalue_by_group <- function(p, group, min_storey = 20, method = c("storey", "bh")) {
+  method <- match.arg(method)
   stopifnot(length(p) == length(group))
   q <- rep(NA_real_, length(p))
   for (g in unique(group)) {
     idx <- which(group == g & !is.na(p))
     if (!length(idx)) next
+    if (method == "bh") {
+      q[idx] <- p.adjust(p[idx], method = "BH")
+      next
+    }
     q[idx] <- tryCatch(
       qvalue::qvalue(p[idx])$qvalues,
       error = function(e) {

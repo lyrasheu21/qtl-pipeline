@@ -18,6 +18,7 @@ rule annotate_permute:
         qtlpost_md5=QTLPOST_MD5,
         fdr=config["qtl_qc"]["fdr"],
         fdr_group_by=lambda wc: set_fdr_group(wc.set),
+        fdr_method=lambda wc: set_spec(wc.set).get("fdr_method", "storey"),
     log:
         f"{LOGS}/qtl/{{variant}}.{{set}}.annotate.log",
     conda:

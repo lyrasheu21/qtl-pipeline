@@ -53,3 +53,12 @@ test_that("skewed p-values that break qvalue() still get Storey q-values", {
   expect_message(q <- qvalue_by_group(p, rep("A", 200)), "base-R Storey")
   expect_equal(q, storey_qvalue(p)$qvalues)
 })
+
+test_that("method = 'bh' gives Benjamini-Hochberg within each group", {
+  set.seed(5)
+  p <- c(runif(50)^3, runif(50))
+  g <- rep(c("A", "B"), each = 50)
+  q <- qvalue_by_group(p, g, method = "bh")
+  expect_equal(q[g == "A"], p.adjust(p[g == "A"], "BH"))
+  expect_equal(q[g == "B"], p.adjust(p[g == "B"], "BH"))
+})

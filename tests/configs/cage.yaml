@@ -41,6 +41,7 @@ phenotypes:
     bed: "tests/data/cage/phenotypes.bed.gz"
     group: "DLPFC"
     fdr_group_by: none
+    fdr_method: bh             # exercises the Benjamini-Hochberg option
     grouped_permutation: true
 
 covariates:

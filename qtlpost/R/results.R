@@ -8,7 +8,9 @@
 #' @param annotation phenotype annotation table (phenotype_id, set, gene, group, ...).
 #' @param gt group table (read_group_table).
 #' @param fdr_group_by "group", "class", "superclass" or "none" (one global q-value).
-annotate_permute <- function(qt, annotation, gt, set_name, fdr_group_by = "group", fdr = 0.05) {
+#' @param fdr_method "storey" (q-values) or "bh" (Benjamini-Hochberg).
+annotate_permute <- function(qt, annotation, gt, set_name, fdr_group_by = "group", fdr = 0.05,
+                             fdr_method = "storey") {
   qt <- qt[!is.na(adj_beta_pval)]
   ann <- copy(annotation)[, c("chrom", "start", "end", "strand") := NULL]
   ann[, set := NULL]
@@ -20,7 +22,7 @@ annotate_permute <- function(qt, annotation, gt, set_name, fdr_group_by = "group
   out[is.na(group), group := "all"]
   out[, `:=`(class = map_group(group, gt, "class"), superclass = map_group(group, gt, "superclass"))]
   strata <- if (fdr_group_by == "none") rep("all", nrow(out)) else out[[fdr_group_by]]
-  out[, qval := qvalue_by_group(adj_beta_pval, strata)]
+  out[, qval := qvalue_by_group(adj_beta_pval, strata, method = fdr_method)]
   out[, fdr_pass := !is.na(qval) & qval <= fdr]
   setcolorder(out, c("set", "phenotype_id", "gene", "group", "class", "superclass"))
   setorder(out, qval)
