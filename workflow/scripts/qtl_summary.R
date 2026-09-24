@@ -5,7 +5,7 @@
 source(file.path(snakemake@scriptdir, "load_qtlpost.R"))
 
 gt <- read_group_table(if (length(snakemake@input[["group_table"]])) snakemake@input[["group_table"]] else NULL)
-qt <- rbindlist(lapply(unlist(snakemake@input[["tables"]]), fread), fill = TRUE)
+qt <- rbindlist(lapply(unlist(snakemake@input[["tables"]]), read_tsv), fill = TRUE)
 
 by_group <- fdr_summary(qt, by = c("set", "group"))
 by_set <- fdr_summary(qt, by = "set")[, group := "all groups"]

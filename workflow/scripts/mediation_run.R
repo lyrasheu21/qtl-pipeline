@@ -4,8 +4,8 @@ source(file.path(snakemake@scriptdir, "load_qtlpost.R"))
 
 set.seed(snakemake@params[["seed"]])
 pattern <- snakemake@params[["expression_pattern"]]
-hits <- fread(snakemake@input[["hits"]])
-genotypes <- fread(snakemake@input[["genotypes"]], colClasses = "character")
+hits <- read_tsv(snakemake@input[["hits"]])
+genotypes <- read_tsv(snakemake@input[["genotypes"]], colClasses = "character")
 
 cache <- new.env()
 get_expression <- function(g) {

@@ -4,7 +4,7 @@ source(file.path(snakemake@scriptdir, "load_qtlpost.R"))
 
 pattern <- snakemake@params[["expression_pattern"]]
 bed <- read_bed_matrix(snakemake@input[["bed"]])
-annotation <- fread(snakemake@input[["annotation"]])
+annotation <- read_tsv(snakemake@input[["annotation"]])
 get_expression <- function(g) {
   path <- fill_pattern(pattern, group = g, subclass = g)
   if (!file.exists(path)) { message("No expression file for ", g, ": ", path); return(NULL) }

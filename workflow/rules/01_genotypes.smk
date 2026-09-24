@@ -94,7 +94,6 @@ elif PCS_SOURCE == "file":
             f"{RES}/genotype/pcs.tsv",
         params:
             rdir=QTLPOST_R,
-            qtlpost_md5=QTLPOST_MD5,
         log:
             f"{LOGS}/genotype_pcs.log",
         conda:

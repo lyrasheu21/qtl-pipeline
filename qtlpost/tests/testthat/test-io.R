@@ -38,3 +38,12 @@ test_that("factors can be read from an RData object", {
 test_that("fill_pattern fills named placeholders", {
   expect_equal(fill_pattern("e_{group}_chr{chr}.gz", group = "Astro", chr = 7), "e_Astro_chr7.gz")
 })
+
+test_that("BED files with ';' in phenotype IDs are read as tab-separated", {
+  path <- tempfile(fileext = ".bed")
+  writeLines(c("#chr\tstart\tend\tpid\tgid\tstrand\tD1\tD2",
+               "1\t100\t101\tchr1:100-101;+\tGENE\t+\t1.5\t2.5"), path)
+  b <- read_bed_matrix(path)
+  expect_equal(rownames(b$mat), "chr1:100-101;+")
+  expect_equal(unname(b$mat[1, ]), c(1.5, 2.5))
+})

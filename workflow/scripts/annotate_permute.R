@@ -6,7 +6,7 @@ source(file.path(snakemake@scriptdir, "load_qtlpost.R"))
 set_name <- snakemake@wildcards[["set"]]
 gt <- read_group_table(if (length(snakemake@input[["group_table"]])) snakemake@input[["group_table"]] else NULL)
 qt <- read_qtltools(snakemake@input[["permute"]], "permute")
-annotation <- fread(snakemake@input[["annotation"]])
+annotation <- read_tsv(snakemake@input[["annotation"]])
 message(sprintf("%s: %d phenotypes tested, %d with a cis variant", set_name, nrow(qt), sum(!is.na(qt$adj_beta_pval))))
 
 out <- annotate_permute(qt, annotation, gt, set_name, snakemake@params[["fdr_group_by"]], snakemake@params[["fdr"]])

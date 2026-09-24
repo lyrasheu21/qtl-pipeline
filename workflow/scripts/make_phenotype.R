@@ -27,7 +27,7 @@ if (adapter == "bed") {
   coords <- data.table(phenotype_id = bed$info$pid, chrom = bed$info$chr, start = bed$info$start,
                        end = bed$info$end, gid = bed$info$gid, strand = bed$info$strand)
   if (!is.null(snakemake@input[["annotation"]])) {
-    ann <- fread(snakemake@input[["annotation"]])
+    ann <- read_tsv(snakemake@input[["annotation"]])
     ann <- ann[match(coords$phenotype_id, ann$phenotype_id)]
     coords[, gene := ann$gene]
     coords[, group := if ("group" %in% names(ann)) ann$group else opt("group", "all")]
@@ -38,7 +38,7 @@ if (adapter == "bed") {
   }
 } else if (adapter == "matrix") {
   mat <- read_feature_matrix(snakemake@input[["matrix"]], opt("id_column", "feature_id"))
-  cd <- fread(snakemake@input[["coordinates"]])
+  cd <- read_tsv(snakemake@input[["coordinates"]])
   id_col <- opt("coordinates_id_column", "feature_id")
   if (!id_col %in% names(cd)) stop("Coordinates table has no column '", id_col, "'")
   cd <- cd[match(rownames(mat), cd[[id_col]])]

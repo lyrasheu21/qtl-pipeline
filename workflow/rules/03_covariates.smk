@@ -11,7 +11,6 @@ rule covariates:
         report=f"{RES}/covariates/{{set}}.{{covset}}.report.tsv",
     params:
         rdir=QTLPOST_R,
-        qtlpost_md5=QTLPOST_MD5,
         covset=lambda wc: COVSETS[wc.covset],
         definitions=COV["metadata"].get("definitions", {}),
         metadata_id=INPUTS.get("metadata_id_column", "SubID"),

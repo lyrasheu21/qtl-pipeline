@@ -2,7 +2,7 @@
 source(file.path(snakemake@scriptdir, "load_qtlpost.R"))
 
 gt <- read_group_table(if (length(snakemake@input[["group_table"]])) snakemake@input[["group_table"]] else NULL)
-master <- fread(snakemake@input[["master"]])
+master <- read_tsv(snakemake@input[["master"]])
 gwas <- unlist(snakemake@params[["gwas"]])
 if (nrow(master) == 0) {
   empty_plot(snakemake@output[[1]], "No colocalised QTLs")

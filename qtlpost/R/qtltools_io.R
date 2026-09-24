@@ -38,8 +38,10 @@ read_qtltools <- function(paths, type = c("permute", "nominal")) {
   layouts <- qtltools_layouts(type)
   pieces <- lapply(paths, function(p) {
     if (!file.exists(p) || file.size(p) == 0) return(NULL)
-    # a gzipped empty file has a non-zero size, so also catch fread's "File is empty"
-    dt <- tryCatch(fread(p, header = FALSE), error = function(e) {
+    # QTLtools writes space-separated output; the separator is fixed because
+    # phenotype and variant IDs can contain ";" (e.g. "chr1:100-100;+").
+    # A gzipped empty file has a non-zero size, so also catch fread's "File is empty".
+    dt <- tryCatch(fread(p, header = FALSE, sep = " "), error = function(e) {
       if (grepl("empty", conditionMessage(e), ignore.case = TRUE)) return(NULL)
       stop(e)
     })

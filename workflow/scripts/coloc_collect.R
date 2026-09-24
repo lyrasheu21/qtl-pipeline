@@ -5,8 +5,8 @@
 #   gold:   Gold_Unique hits (exactly one SNP with SNP.PP.H4 > 0.5)
 source(file.path(snakemake@scriptdir, "load_qtlpost.R"))
 
-all <- rbindlist(lapply(unlist(snakemake@input[["summaries"]]), fread), fill = TRUE)
-qt <- rbindlist(lapply(unlist(snakemake@input[["permute"]]), fread), fill = TRUE)
+all <- rbindlist(lapply(unlist(snakemake@input[["summaries"]]), read_tsv), fill = TRUE)
+qt <- rbindlist(lapply(unlist(snakemake@input[["permute"]]), read_tsv), fill = TRUE)
 keep_cols <- intersect(c("set", "phenotype_id", "gene", "group", "class", "superclass",
                          "partner_gene", "partner_group"), names(qt))
 ann <- unique(qt[, ..keep_cols], by = c("set", "phenotype_id"))

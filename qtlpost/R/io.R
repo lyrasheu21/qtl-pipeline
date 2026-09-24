@@ -38,13 +38,18 @@ read_feature_matrix <- function(path, id_column) {
   mat
 }
 
+#' Read a tab-separated table written by the pipeline (or documented as TSV).
+#' The separator is fixed because IDs can contain ";" or ",", which would
+#' otherwise confuse fread's separator detection.
+read_tsv <- function(path, ...) fread(path, sep = "\t", ...)
+
 #' Read the CCI score matrix (rows = CCIs, columns = donors).
 read_cci_matrix <- function(path, id_column) read_feature_matrix(path, id_column)
 
 #' Read a QTLtools phenotype BED (plain or bgzipped) into a list with the six
 #' annotation columns and the numeric sample matrix.
 read_bed_matrix <- function(path) {
-  dt <- fread(path)
+  dt <- fread(path, sep = "\t")
   setnames(dt, 1:6, c("chr", "start", "end", "pid", "gid", "strand"))
   mat <- as.matrix(dt[, -(1:6), with = FALSE])
   storage.mode(mat) <- "double"

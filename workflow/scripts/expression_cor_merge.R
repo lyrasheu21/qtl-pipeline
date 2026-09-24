@@ -1,7 +1,7 @@
 # Combine phenotype-expression correlations across sets and plot them.
 source(file.path(snakemake@scriptdir, "load_qtlpost.R"))
 
-res <- rbindlist(lapply(unlist(snakemake@input), fread), fill = TRUE)
+res <- rbindlist(lapply(unlist(snakemake@input), read_tsv), fill = TRUE)
 write_tsv(res, snakemake@output[["table"]])
 res <- res[!is.na(r)]
 if (nrow(res) == 0) {

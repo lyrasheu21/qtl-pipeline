@@ -8,8 +8,8 @@ settings <- snakemake@params[["settings"]]
 plot_dir <- snakemake@output[["plots"]]
 dir.create(plot_dir, showWarnings = FALSE, recursive = TRUE)
 
-nom <- fread(snakemake@input[["nominal"]])
-qt <- fread(snakemake@input[["permute"]])
+nom <- read_tsv(snakemake@input[["nominal"]])
+qt <- read_tsv(snakemake@input[["permute"]])
 n_qtl <- length(read_ids(snakemake@input[["donors"]]))
 message(sprintf("%s / %s: %d FDR phenotypes, %d nominal rows, N = %d", spec$name, set_name,
                 uniqueN(nom$phe_id), nrow(nom), n_qtl))

@@ -21,7 +21,7 @@ if (length(use)) {
 n_gpc <- as.integer(cs$genotype_pcs)
 if (n_gpc > 0) {
   if (is.null(snakemake@input[["pcs"]])) stop("covariates.genotype_pcs > 0 but genotypes.pcs.source is 'none'")
-  pcs <- fread(snakemake@input[["pcs"]])
+  pcs <- read_tsv(snakemake@input[["pcs"]])
   pc_mat <- as.matrix(pcs[, -1])
   rownames(pc_mat) <- as.character(pcs[[1]])
   blocks$genotype_pcs <- factor_covariates(pc_mat, donors, n_gpc, "genotype_PC")

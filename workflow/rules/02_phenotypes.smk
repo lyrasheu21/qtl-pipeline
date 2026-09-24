@@ -12,7 +12,6 @@ rule make_phenotype:
         report=f"{RES}/phenotypes/{{set}}.c{{fraction}}.report.tsv",
     params:
         rdir=QTLPOST_R,
-        qtlpost_md5=QTLPOST_MD5,
         adapter=lambda wc: SETS[wc.set]["adapter"],
         direction=lambda wc: SETS[wc.set]["direction"] or "",
         spec=lambda wc: SETS[wc.set]["spec"],

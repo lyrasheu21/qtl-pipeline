@@ -6,7 +6,7 @@ info <- snakemake@params[["variant_info"]]
 covsets <- snakemake@params[["covsets"]]
 variants <- unlist(snakemake@params[["variants"]])
 sets <- unlist(snakemake@params[["sets"]])
-tables <- lapply(unlist(snakemake@input), fread)
+tables <- lapply(unlist(snakemake@input), read_tsv)
 
 counts <- rbindlist(Map(function(dt, v, s) {
   # variants whose BED has no phenotypes (e.g. a strict nonzero filter) report zeros

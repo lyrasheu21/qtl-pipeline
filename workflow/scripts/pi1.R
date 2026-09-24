@@ -3,7 +3,7 @@
 source(file.path(snakemake@scriptdir, "load_qtlpost.R"))
 
 s <- snakemake@params[["settings"]]
-qt <- rbindlist(lapply(unlist(snakemake@input[["tables"]]), fread), fill = TRUE)
+qt <- rbindlist(lapply(unlist(snakemake@input[["tables"]]), read_tsv), fill = TRUE)
 hits <- qt[fdr_pass == TRUE & !is.na(gene), .(set, phenotype_id, group, gene, snp = var_id, chr = var_chr, qtl_beta = slope)]
 message(sprintf("FDR QTLs to look up: %d", nrow(hits)))
 res <- pi1_replication(hits, s$eqtl_pattern, has_header = isTRUE(s$has_header), columns = unlist(s$columns),

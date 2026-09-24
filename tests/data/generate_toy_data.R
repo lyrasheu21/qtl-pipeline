@@ -182,10 +182,11 @@ cage_dir <- file.path(out_dir, "cage")
 dir.create(cage_dir, showWarnings = FALSE)
 hidden <- matrix(rnorm(n_donors * 3), ncol = 3, dimnames = list(donors, NULL))  # unmeasured confounders
 peaks <- rbindlist(lapply(seq_len(nrow(genes)), function(i) {
-  data.table(chr = sub("chr", "", genes$chrom[i]), start = genes$start[i] + c(-300, 0, 150, 400, 900),
+  data.table(chr = sub("chr", "", genes$chrom[i]), start = as.integer(genes$start[i] + c(-300, 0, 150, 400, 900)),
              gene = genes$gene_name[i], k = 1:5)
 }))
-peaks[, `:=`(end = start + 100, pid = sprintf("peak_%s_%d", gene, k), strand = "+")]
+peaks[, `:=`(end = start + 100, strand = "+")]
+peaks[, pid := sprintf("chr%s:%d-%d;%s", chr, start, end, strand)]  # real CAGE ID format, contains ";"
 loadings <- matrix(rnorm(nrow(peaks) * 3, sd = 1.5), ncol = 3)
 values <- 10 + loadings %*% t(hidden) + matrix(rnorm(nrow(peaks) * n_donors), nrow = nrow(peaks))
 values[peaks$gene == "LIGA" & peaks$k <= 2, ] <- values[peaks$gene == "LIGA" & peaks$k <= 2, ] + rep(1.5 * g1, each = 2)

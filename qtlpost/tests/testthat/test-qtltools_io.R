@@ -55,3 +55,14 @@ test_that("empty files give an empty, correctly named table", {
 test_that("unexpected column counts are rejected", {
   expect_error(read_qtltools(write_rows(12), "permute"), "not a known")
 })
+
+test_that("IDs containing ';' do not confuse the column split (CAGE peak IDs)", {
+  path <- tempfile(fileext = ".txt")
+  row <- c("chr1:629087-629087;+", "1", "629087", "629087", "+", "1746", "-17770", "rs1;rs2", "1",
+           "611317", "611317", "161", "147.7", "1.01", "282.5", "0.0019", "0.058", "0.49", "0.16", "0.57", "0.56")
+  writeLines(c(paste(row, collapse = " "), paste(replace(row, 1, "chr1:700000-700010;-"), collapse = " ")), path)
+  dt <- read_qtltools(path, "permute")
+  expect_equal(dt$phe_id, c("chr1:629087-629087;+", "chr1:700000-700010;-"))
+  expect_equal(dt$var_id, c("rs1;rs2", "rs1;rs2"))
+  expect_equal(dt$adj_beta_pval, c(0.56, 0.56))
+})

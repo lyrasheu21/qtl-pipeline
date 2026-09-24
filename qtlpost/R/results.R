@@ -50,9 +50,9 @@ read_qtl_results <- function(results_dir, sets = NULL) {
   files <- list.files(file.path(results_dir, "qtl", "main"), pattern = "\\.permute\\.tsv\\.gz$", full.names = TRUE)
   found <- sub("\\.permute\\.tsv\\.gz$", "", basename(files))
   sets <- sets %||% found
-  permute <- rbindlist(lapply(sets, function(s) fread(file.path(results_dir, "qtl", "main", paste0(s, ".permute.tsv.gz")))),
+  permute <- rbindlist(lapply(sets, function(s) read_tsv(file.path(results_dir, "qtl", "main", paste0(s, ".permute.tsv.gz")))),
                        fill = TRUE)
-  annotation <- rbindlist(lapply(sets, function(s) fread(file.path(results_dir, "phenotypes", paste0(s, ".annotation.tsv")))),
+  annotation <- rbindlist(lapply(sets, function(s) read_tsv(file.path(results_dir, "phenotypes", paste0(s, ".annotation.tsv")))),
                           fill = TRUE)
   list(permute = permute, annotation = annotation, sets = sets)
 }

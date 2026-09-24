@@ -21,8 +21,10 @@ def _md5_of_dir(path):
     return h.hexdigest()
 
 
-# Passed as a param to every R rule: editing qtlpost/R changes it, so
-# Snakemake re-runs the affected rules.
+# Passed as a param to the QC and downstream R rules: editing qtlpost/R
+# changes it, so Snakemake re-runs them. Deliberately not used by the
+# genotype / phenotype / covariate rules, whose outputs feed the expensive
+# QTLtools jobs: a code change there must not force QTL mapping to rerun.
 QTLPOST_MD5 = _md5_of_dir(QTLPOST_R)
 
 

@@ -3,7 +3,7 @@
 source(file.path(snakemake@scriptdir, "load_qtlpost.R"))
 
 s <- snakemake@params[["settings"]]
-gold <- fread(snakemake@input[[1]])
+gold <- read_tsv(snakemake@input[[1]])
 if (!"partner_gene" %in% names(gold)) gold[, `:=`(partner_gene = NA_character_, partner_group = NA_character_)]
 hits <- gold[!is.na(lead_snp_pp_h4) & lead_snp_pp_h4 > s$snp_pp_h4 & PP.H4 > s$pp_h4 &
              !is.na(gwas_p) & gwas_p < s$gwas_p & !is.na(qtl_p) & qtl_p < s$qtl_p &
