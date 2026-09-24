@@ -13,4 +13,4 @@ hits <- hits[, .(gwas, set, phenotype_id, snp = lead_snp, group, gene, partner_g
 setorder(hits, gwas, set, -PP.H4)
 message(sprintf("Colocalised hits passing mediation filters: %d (from %d Gold_Unique)", nrow(hits), nrow(gold)))
 write_tsv(hits, snakemake@output[["hits"]])
-writeLines(unique(hits$snp), snakemake@output[["snps"]])
+writeLines(as.character(unique(hits$snp)), snakemake@output[["snps"]])  # as.character: empty tables read as logical

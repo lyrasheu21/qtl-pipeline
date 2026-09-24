@@ -22,4 +22,4 @@ if (nrow(out)) {
 write_tsv(out, snakemake@output[["table"]])
 # keys as they appear in column 1 of the nominal output (the group ID for --grp-best runs)
 keys <- out[fdr_pass == TRUE, fifelse(is.na(grp_id), phenotype_id, grp_id)]
-writeLines(unique(keys), snakemake@output[["fdr_keys"]])
+writeLines(as.character(unique(keys)), snakemake@output[["fdr_keys"]])
