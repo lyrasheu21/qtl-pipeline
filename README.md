@@ -105,7 +105,7 @@ are not settled live as notebooks in [`analyses/`](analyses/):
 
 - [`analyses/mediation/cci_mediation.Rmd`](analyses/mediation/cci_mediation.Rmd): does a
   colocalised cciQTL act through expression of its anchor gene on its interaction partner?
-  (`mediation::mediate`, plus an interaction model and chord diagrams, with the caveats spelled out.)
+  (`mediation::mediate` plus an interaction model, with the caveats spelled out.)
 
 ## `qtlpost` R package
 

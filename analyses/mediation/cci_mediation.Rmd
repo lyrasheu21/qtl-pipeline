@@ -34,8 +34,8 @@ rmarkdown::render("analyses/mediation/cci_mediation.Rmd",
                   params = list(results_dir = "/path/to/results/cci", qtl_p = 5e-8))
 ```
 
-Requirements: R packages `data.table`, `ggplot2`, `mediation`, `circlize`,
-`rprojroot`, `rmarkdown`, and `bcftools` on the `PATH`.
+Requirements: R packages `data.table`, `mediation`, `rprojroot`, `rmarkdown`,
+and `bcftools` on the `PATH`.
 
 ## The question and the model
 
@@ -75,7 +75,6 @@ the anchor? Its `anchor:genotype` term and partial η² are reported separately.
 
 ```{r packages}
 library(data.table)
-library(ggplot2)
 set.seed(params$seed)
 res <- params$results_dir
 ```
@@ -174,26 +173,6 @@ results[order(acme_p)]
 out_dir <- file.path(res, "analyses", "mediation")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 fwrite(results, file.path(out_dir, "mediation_results.tsv"), sep = "\t")
-```
-
-## 5. One anchor at a time
-
-For each anchor gene, every tested partner as a chord (red: ACME p < 0.05).
-
-```{r chords, fig.height = 6}
-chord <- function(target) {
-  med <- results[anchor == target][order(acme_p)][!duplicated(partner)]
-  cols <- setNames(grDevices::hcl.colors(nrow(med) + 1, "Dark 3"), c(med$partner, target))
-  circlize::circos.clear()
-  circlize::circos.par(start.degree = 90)
-  circlize::chordDiagram(data.frame(from = med$partner, to = target, value = 1), grid.col = cols,
-                         col = ifelse(med$acme_p < 0.05, "#D7191CCC", "#99999966"), directional = 1,
-                         direction.type = c("diffHeight", "arrows"), link.arr.type = "big.arrow",
-                         annotationTrack = c("name", "grid"))
-  graphics::title(target)
-  circlize::circos.clear()
-}
-for (target in unique(results$anchor)) chord(target)
 ```
 
 ## Session info
