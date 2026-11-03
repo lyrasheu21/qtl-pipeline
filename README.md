@@ -116,8 +116,8 @@ Exploratory follow-ups that build on the pipeline's outputs but involve modellin
 are not settled live as notebooks in [`analyses/`](analyses/):
 
 - [`analyses/mediation/cci_mediation.Rmd`](analyses/mediation/cci_mediation.Rmd): does a
-  colocalised cciQTL act through expression of its anchor gene on its interaction partner?
-  (`mediation::mediate` plus an interaction model, with the caveats spelled out.)
+  colocalised QTL act through expression of its anchor gene on its interaction partner?
+  (`mediation::mediate` plus an interaction model, can be applied to verify trans-QTL)
 
 ## `qtlpost` R package
 
